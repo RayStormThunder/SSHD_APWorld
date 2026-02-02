@@ -8,8 +8,8 @@ This APWorld allows you to play Skyward Sword HD in a multiworld randomizer with
 
 ## Features
 
-- **912 Locations**: All chests, goddess cubes, NPCs, dungeons, minigames, and more
-- **300+ Items**: Progression items, equipment, tablets, keys, consumables
+- **800+ Locations**: All chests, goddess cubes, NPCs, dungeons, minigames, and more
+- **200+ Items**: Progression items, equipment, tablets, keys, consumables
 - **Full Logic Support**: Ensures you always have items needed to progress
 - **40+ Options**: Customize starting items, logic difficulty, item placement
 - **Custom Logos**: Replace title screen with Archipelago branding

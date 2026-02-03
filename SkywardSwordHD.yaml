@@ -10,7 +10,7 @@ Skyward Sword HD:
   # ========================================
   
   # Path to extracted SSHD ROM (must contain romfs/ and exefs/ folders)
-  # On Windows: C:\ProgramData\Archipelago\sshd_extract or C:\\ProgramData\\Archipelago\\sshd_extract
+  # On Windows: C:\\ProgramData\\Archipelago\\sshd_extract
   # On Linux: /home/user/.local/share/Archipelago/sshd_extract
   # On macOS: /Users/user/Library/Application Support/Archipelago/sshd_extract
   extract_path: ""

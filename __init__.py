@@ -467,6 +467,18 @@ class SSHDWorld(World):
         # These items should NOT be added to the item pool since they're given at start
         starting_items = getattr(self, '_sshd_starting_items', {})
         
+        # Grant starting items as precollected items to the player
+        if starting_items:
+            print(f"[__init__.py] Granting starting items as precollected:")
+            for item_name, count in starting_items.items():
+                if item_name in ITEM_TABLE:
+                    for _ in range(count):
+                        item = self.create_item(item_name)
+                        self.multiworld.push_precollected(item)
+                    print(f"  {item_name} x{count}")
+                else:
+                    print(f"  [WARNING] '{item_name}' not found in ITEM_TABLE - skipped")
+        
         # Add all progression and useful items first (but not traps)
         item_pool = []
         for name, data in ITEM_TABLE.items():

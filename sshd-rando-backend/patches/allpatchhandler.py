@@ -119,21 +119,18 @@ class AllPatchHandler:
         patch_tablet_ui(output_dir / "romfs")
 
         update_progress_value(82)
-        # Skip dynamic text patches for Archipelago (Archipelago handles hints)
-        # add_dynamic_text_patches(self.world, self.event_patch_handler)
+        add_dynamic_text_patches(self.world, self.event_patch_handler)
 
         update_progress_value(84)
-        # Skip event patches for Archipelago (text patches not needed)
-        # print_progress_text("Patching Events")
-        # start_event_patching_time = time.process_time()
-        # self.event_patch_handler.handle_event_patches(
-        #     self.conditional_patch_handler, self.world.setting("language")
-        # )
-        # print(
-        #     f"Patching events took {(time.process_time() - start_event_patching_time)} seconds"
-        # )
+        print_progress_text("Patching Events")
+        start_event_patching_time = time.process_time()
+        self.event_patch_handler.handle_event_patches(
+            self.conditional_patch_handler, self.world.setting("language")
+        )
+        print(
+            f"Patching events took {(time.process_time() - start_event_patching_time)} seconds"
+        )
 
-        # ASM patching IS needed for Archipelago - it makes the randomizer actually work!
         update_progress_value(90)
         self.asm_patch_handler.patch_all_asm(self.world, self.conditional_patch_handler)
         copy_extra_mod_files(

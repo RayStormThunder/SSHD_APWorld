@@ -72,6 +72,12 @@ main:
     # Reloader stuff
     GAME_RELOADER_PTR: 0x7102bfd930
     RESPAWN_TYPE: 0x7102bfd960
+    
+    # Archipelago integration buffer (allocated in Rust)
+    # Get actual address with: get_archipelago_buffer_address()
+    # For now, this will be set when Rust compiles
+    # ARCHIPELAGO_BUFFER: [see Rust static allocation]
+    
     CURRENT_STAGE_NAME: 0x7102bfd8d8
     CURRENT_STAGE_SUFFIX: 0x7102bfd8dc
     CURRENT_ROOM: 0x7102bfd8fa

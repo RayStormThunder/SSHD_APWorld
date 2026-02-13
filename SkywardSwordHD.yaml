@@ -21,12 +21,23 @@ Skyward Sword HD:
 
 
 
-  # YOU HAVE TWO OPTIONS TO CONFIGURE YOUR RANDOMIZER SETTINGS:
+  # YOU HAVE THREE OPTIONS TO CONFIGURE YOUR RANDOMIZER SETTINGS:
 
 
   # ========================================
-  # CONFIGURATION METHOD ONE: SETTING STRING
-  # NOT CURRENTLY WORKING RELIABLY ENOUGH - USE METHOD TWO INSTEAD FOR NOW
+  # CONFIGURATION METHOD ONE: USING config.yaml
+  # This is the recommended method. It is the most user-friendly and will be compatible with all versions of the randomizer.
+  # ========================================
+  # Configure all of your settings in the vanilla Skyward Sword HD Randomizer application (only change the settings, do not generate).
+  # When you're done, there should be a config.yaml file in the randomizer folder. Copy its path into the field below and the settings will be imported from that file.
+  # Example: C:\\Users\\awesome_user\\Downloads\\Skyward_Sword_HD_Randomizer_v2.2_windows\\config.yaml
+  config_yaml_path: ""
+
+
+
+  # ========================================
+  # CONFIGURATION METHOD TWO: SETTING STRING
+  # NOT CURRENTLY WORKING RELIABLY ENOUGH - USE METHOD TWO OR THREE INSTEAD FOR NOW
   # ========================================
   # Leave setting_string BLANK to use manual configuration below
   # Manual configuration gives you full control and avoids item mapping issues
@@ -43,7 +54,7 @@ Skyward Sword HD:
 
 
   # ========================================
-  # CONFIGURATION METHOD TWO: MANUAL SETTINGS
+  # CONFIGURATION METHOD THREE: MANUAL SETTINGS
   # ========================================
   
   
@@ -62,6 +73,11 @@ Skyward Sword HD:
   # extra: Extra items added for more variety
   # plentiful: The standard item pool will be used plus 100% extra of the major items. E.g. There will be 8 Beetles, 6 Bows, 4 Mitts, etc...
   item_pool: standard
+  
+  # Progressive Items
+  # true: Items with multiple tiers (Sword, Beetle, Bow, Slingshot, Bug Net, Mitts, Pouches, Wallets) will automatically upgrade to the next tier when collected
+  # false: Each tier is a separate item (e.g., you could find Tough Beetle before normal Beetle)
+  progressive_items: true
   
   # ========================================
   # COMPLETION REQUIREMENTS
@@ -329,6 +345,7 @@ Skyward Sword HD:
   # ========================================
   
   # Damage Multiplier
+  # invincible: No damage taken (invincible)
   # half: 50% damage taken
   # normal: 100% damage taken (default)
   # double: 200% damage taken
@@ -480,34 +497,6 @@ Skyward Sword HD:
   # ========================================
   # QUALITY OF LIFE SHORTCUTS
   # ========================================
-  
-  # Open Thunderhead
-  # false: You will need the Ballad of the Goddess and Goddess's Harp before the Thunderhead can be opened
-  # true: The Thunderhead will be opened from the start of the game
-  open_thunderhead: false
-  
-  # Open Lake Floria
-  # vanilla: You are expected to climb the Great Tree, talk to Yerbal, and open the Lake Floria Gates with the Goddess Sword in order to enter Lake Floria
-  # yerbal: You are expected to climb the Great Tree and talk to Yerbal in order to enter Lake Floria
-  # open: The Lake Floria Gates will be opened from the start of the game (default)
-  open_lake_floria: open
-  
-  # Open Earth Temple
-  # open: The Earth Temple Door will be opened from the start of the game (default)
-  # shuffle_eldin: You will need to collect all the Earth Temple Key Pieces, shuffled within the Eldin Volcano region, in order to open the Earth Temple Door
-  # shuffle_anywhere: You will need to collect all the Earth Temple Key Pieces, shuffled anywhere, in order to open the Earth Temple Door
-  open_earth_temple: open
-  
-  # Open Lanayru Mining Facility
-  # nodes: You will need to activate each of the 3 nodes and the main node in order to raise the Lanayru Mining Facility
-  # main_node: You will need to activate the main node in order to raise the Lanayru Mining Facility
-  # open: The Lanayru Mining Facility will be raised from the start of the game (default)
-  open_lmf: open
-  
-  # Batreaux's Shed
-  # false: Batreaux Shed starts closed (default)
-  # true: Batreaux's Shed is open from the start
-  open_batreaux_shed: false
   
   # Isle of Songs Bridge Complete
   # false: You will need to solve the bridge puzzle in order to enter inside of the Isle of Songs

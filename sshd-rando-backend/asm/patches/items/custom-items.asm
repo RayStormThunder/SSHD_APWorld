@@ -20,7 +20,7 @@
 
 .2byte 0xA7 ; Group of Tadtones (214)
 .2byte 0xA7 ; Scrapper          (215)
-.2byte 0xA7 ; Unused            (216)
+.2byte 0xA7 ; Archipelago Item  (216)
 .2byte 0xA7 ; Unused            (217)
 .2byte 0xA7 ; Unused            (218)
 .2byte 0xA7 ; Unused            (219)
@@ -80,7 +80,7 @@
 .int 0x1000 ; SK Map            (213)
 .int 0      ; Group of Tadtones (214)
 .int 0x1000 ; Scrapper          (215)
-.int 0      ; Unused            (216)
+.int 0x1000 ; Archipelago Item  (216)
 .int 0      ; Unused            (217)
 .int 0      ; Unused            (218)
 .int 0      ; Unused            (219)

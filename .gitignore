@@ -10,6 +10,7 @@ __pycache__/
 build.log
 dist/
 build/
+sshd-rando-backend/asm/additions/rust-additions/target/
 
 # PyInstaller spec files
 *.spec
@@ -39,4 +40,3 @@ ITEM_MEMORY_ADDRESSES.py
 ITEM_MEMORY_MAP.py
 check_config.py
 decode_setting_string.py
-worlds_stub.py

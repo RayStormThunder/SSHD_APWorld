@@ -185,6 +185,55 @@ pub extern "C" fn give_item_with_sceneflag(itemid: u8, sceneflag: u8) -> *mut dA
     }
 }
 
+// Archipelago Integration - Buffer-based item distribution
+// This static buffer is allocated in Rust's data section and can be safely
+// accessed
+static mut ARCHIPELAGO_BUFFER: [u8; 16] = [0; 16];
+
+// Get the buffer address for Python client to use
+#[no_mangle]
+pub extern "C" fn get_archipelago_buffer_address() -> u64 {
+    unsafe { ARCHIPELAGO_BUFFER.as_ptr() as u64 }
+}
+
+// Called every frame from main loop to check for pending items
+#[no_mangle]
+pub extern "C" fn archipelago_check_item_buffer() {
+    unsafe {
+        // Safety check: Don't try to give items if ROOM_MGR is not initialized
+        if ROOM_MGR.is_null() {
+            return;
+        }
+
+        let buffer_ptr = ARCHIPELAGO_BUFFER.as_mut_ptr();
+
+        // Check each slot in the buffer (4 slots, 4 bytes each)
+        for slot in 0..4 {
+            let offset = slot * 4;
+            let item_id = *buffer_ptr.add(offset);
+
+            // Skip empty slots (item_id == 0)
+            if item_id == 0 {
+                continue;
+            }
+
+            let _flags = *buffer_ptr.add(offset + 1);
+            // Give the item using the existing function
+            // sceneflag 0xFF means no specific scene flag check
+            give_item_with_sceneflag(item_id, 0xFF);
+
+            // Clear the buffer slot after giving the item
+            *buffer_ptr.add(offset) = 0;
+            *buffer_ptr.add(offset + 1) = 0;
+            *buffer_ptr.add(offset + 2) = 0;
+            *buffer_ptr.add(offset + 3) = 0;
+
+            // Only process one item per frame to avoid overwhelming the game
+            break;
+        }
+    }
+}
+
 #[no_mangle]
 pub extern "C" fn init_appearing_chest_subtype(tbox: *mut dAcTbox) -> *mut dAcTbox {
     unsafe {
@@ -866,8 +915,8 @@ pub extern "C" fn fix_freestanding_item_y_offset(item_actor: *mut dAcItem) {
                 50 | 131 | 137 | 177 | 207..=213 => y_offset = 19.0,
                 // Earrings
                 138 => y_offset = 6.0,
-                // Letter | Monster Horn
-                158 | 171 => y_offset = 12.0,
+                // Letter | Monster Horn | Archipelago Item
+                158 | 171 | 216 => y_offset = 12.0,
                 // Rattle
                 160 => {
                     y_offset = 5.0;
@@ -1060,8 +1109,8 @@ pub extern "C" fn fix_freestanding_item_horizontal_offset(item_actor: *mut dAcIt
                 134 => h_offset = 30.0,
                 // Fireshield Earrings
                 138 => h_offset = 20.0,
-                // Cawlin's Letter
-                158 => {
+                // Cawlin's Letter | Archipelago Item
+                158 | 216 => {
                     h_offset = 15.0;
                     angle_change_y = 0x2000;
                 },
@@ -1227,6 +1276,7 @@ pub extern "C" fn resolve_progressive_item_models(
             model_name = match item_id {
                 214 => c"Onp".as_ptr(),
                 215 => c"DesertRobot".as_ptr(),
+                216 => c"GetKobunALetter".as_ptr(),
                 _ => model_name,
             };
 
@@ -1244,6 +1294,7 @@ pub extern "C" fn resolve_progressive_item_models(
                 214 if (s_rng & 1) == 0 => c"OnpA".as_ptr(),
                 214 => c"OnpB".as_ptr(),
                 215 => c"DesertRobot".as_ptr(),
+                216 => c"GetKobunALetter".as_ptr(),
                 _ => model_name,
             };
 

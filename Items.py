@@ -138,6 +138,8 @@ ITEM_TABLE: dict[str, SSHDItem] = {
     "Dusk Relic": SSHDItem("Dusk Relic", 2773168, IC.filler, 168),
     "Jelly Blob": SSHDItem("Jelly Blob", 2773169, IC.filler, 169),
     "Monster Claw": SSHDItem("Monster Claw", 2773170, IC.filler, 170),
+    # ID 216: Archipelago Item (cross-world placeholder)
+    "Archipelago Item": SSHDItem("Archipelago Item", 2773216, IC.filler, 216),
     "Monster Horn": SSHDItem("Monster Horn", 2773171, IC.filler, 171),
     "Ornamental Skull": SSHDItem("Ornamental Skull", 2773172, IC.filler, 172),
     "Evil Crystal": SSHDItem("Evil Crystal", 2773173, IC.filler, 173),

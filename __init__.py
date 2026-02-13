@@ -797,12 +797,143 @@ class SSHDWorld(World):
             traceback.print_exc()
             return None, None
     
+    def _load_config_yaml(self) -> dict:
+        """
+        Load settings from config.yaml file.
+        
+        Returns:
+            dict: Settings loaded from config.yaml, or empty dict if file not found
+        """
+        import yaml
+        from pathlib import Path
+        
+        # Get config path from options
+        config_path_str = self.options.config_yaml_path.value
+        if not config_path_str:
+            # No config path specified, return empty dict to use Archipelago options
+            return {}
+        
+        config_path = Path(config_path_str)
+        
+        if not config_path.exists():
+            print(f"[__init__.py] Warning: config.yaml not found at {config_path}")
+            return {}
+        
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config_data = yaml.safe_load(f)
+            
+            if not config_data:
+                print(f"[__init__.py] Warning: config.yaml is empty")
+                return {}
+            
+            # Extract World 1 settings (the config has a "World 1" key)
+            world_settings = config_data.get('World 1', {})
+            
+            # Also include top-level settings like seed, generate_spoiler_log, etc.
+            result = {}
+            
+            # Copy top-level settings
+            for key in ['seed', 'generate_spoiler_log', 'use_plandomizer', 'plandomizer_file']:
+                if key in config_data:
+                    result[key] = config_data[key]
+            
+            # Merge world settings
+            result.update(world_settings)
+            
+            print(f"[__init__.py] Loaded {len(result)} settings from config.yaml")
+            return result
+            
+        except Exception as e:
+            print(f"[__init__.py] Error loading config.yaml: {e}")
+            import traceback
+            traceback.print_exc()
+            return {}
+    
     def _collect_archipelago_settings(self) -> dict:
         """
         Collect Archipelago options as a dictionary for sshd-rando wrapper.
         
+        First tries to load from config.yaml if config_yaml_path option is set.
+        If that file exists and contains valid settings, uses those.
+        Otherwise falls back to Archipelago options.
+        
         Maps Archipelago option values to sshd-rando setting names and values.
         """
+        # Try loading from config.yaml first
+        config_settings = self._load_config_yaml()
+        
+        if config_settings:
+            print("[__init__.py] Using settings from config.yaml")
+            # Convert the config settings to the format expected by sshd-rando
+            # Most settings are already in the correct format (string values like "on"/"off")
+            # Just need to ensure proper types
+            settings_dict = {}
+            
+            # Copy all settings from config
+            for key, value in config_settings.items():
+                if key in ['seed', 'generate_spoiler_log', 'use_plandomizer', 'plandomizer_file']:
+                    # These are top-level settings, handle separately if needed
+                    continue
+                
+                # Convert values to strings if they aren't already
+                if isinstance(value, bool):
+                    settings_dict[key] = "on" if value else "off"
+                elif isinstance(value, (int, float)):
+                    settings_dict[key] = str(value)
+                elif isinstance(value, str):
+                    # Keep strings as-is (including "random", "on", "off", etc.)
+                    settings_dict[key] = value
+                elif isinstance(value, list):
+                    settings_dict[key] = value
+                elif value is None:
+                    # Skip None values
+                    continue
+                else:
+                    settings_dict[key] = str(value)
+            
+            # Handle extract_path if not in config
+            if 'extract_path' not in settings_dict:
+                settings_dict["extract_path"] = self.options.extract_path.value or str(get_default_sshd_extract_path())
+            
+            # Handle setting_string if not in config
+            if 'setting_string' not in settings_dict:
+                settings_dict["setting_string"] = self.options.setting_string.value or ""
+            
+            # OVERRIDE settings that would break Archipelago functionality
+            # These must be set regardless of what's in config.yaml
+            print("[__init__.py] Applying Archipelago-required setting overrides...")
+            
+            # Demise must be enabled for Archipelago (it's the goal)
+            settings_dict["skip_demise"] = "off"
+            
+            # Hints are disabled - Archipelago uses its own hint system
+            settings_dict["path_hints"] = "0"
+            settings_dict["barren_hints"] = "0"
+            settings_dict["location_hints"] = "0"
+            settings_dict["item_hints"] = "0"
+            settings_dict["song_hints"] = "off"
+            settings_dict["impa_sot_hint"] = "off"
+            
+            # Ensure hints on Fi/Gossip Stones are off (Archipelago handles hints)
+            settings_dict["path_hints_on_fi"] = "off"
+            settings_dict["path_hints_on_gossip_stones"] = "off"
+            settings_dict["barren_hints_on_fi"] = "off"
+            settings_dict["barren_hints_on_gossip_stones"] = "off"
+            settings_dict["location_hints_on_fi"] = "off"
+            settings_dict["location_hints_on_gossip_stones"] = "off"
+            settings_dict["item_hints_on_fi"] = "off"
+            settings_dict["item_hints_on_gossip_stones"] = "off"
+            
+            # Spawn hearts must be on for Archipelago
+            settings_dict["spawn_hearts"] = "on"
+            
+            print("[__init__.py] Applied overrides: skip_demise=off, all hints disabled, spawn_hearts=on")
+            
+            return settings_dict
+        
+        # Fall back to Archipelago options if config.yaml doesn't exist or is empty
+        print("[__init__.py] Using Archipelago options (config.yaml not found or empty)")
         settings_dict = {}
         
         # Logic Settings
@@ -996,7 +1127,7 @@ class SSHDWorld(World):
         settings_dict["start_with_all_treasures"] = "on" if self.options.start_with_all_treasures.value else "off"
         
         # Difficulty
-        damage_map = {0: "half", 1: "normal", 2: "double", 3: "quadruple", 4: "ohko"}
+        damage_map = {0: "half", 1: "normal", 2: "double", 3: "quadruple", 4: "ohko", 5: "invincible"}
         settings_dict["damage_multiplier"] = damage_map[self.options.damage_multiplier.value]
         settings_dict["spawn_hearts"] = "on"
 
@@ -1089,7 +1220,7 @@ class SSHDWorld(World):
         """
         Build a mapping from SSHD location names to Archipelago item names.
         
-        Cross-world items (from other players' games) are replaced with Cawlin's Letter.
+        Cross-world items (from other players' games) are replaced with Archipelago Item.
         PROTECTED LOCATIONS: Some critical locations should never be replaced with cross-world items.
         
         Returns:
@@ -1134,9 +1265,9 @@ class SSHDWorld(World):
                         print(f"[__init__.py] PROTECTED: '{ap_item_name}' at {location.name} (not replaced)")
                         protected_count += 1
                     else:
-                        # Cross-world item - replace with Cawlin's Letter
-                        location_item_mapping[location.name] = "Cawlin's Letter"
-                        print(f"[__init__.py] Note: Cross-world item '{ap_item_name}' at {location.name} -> Cawlin's Letter")
+                        # Cross-world item - replace with Archipelago Item
+                        location_item_mapping[location.name] = "Archipelago Item"
+                        print(f"[__init__.py] Note: Cross-world item '{ap_item_name}' at {location.name} -> Archipelago Item")
                         cross_world_count += 1
                 else:
                     # Location has no item - skip

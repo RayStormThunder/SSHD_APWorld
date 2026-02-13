@@ -29,6 +29,36 @@ import platformdirs
 os.environ["KIVY_HOME"] = os.path.join(platformdirs.user_config_dir("Archipelago", False), "kivy")
 os.makedirs(os.environ["KIVY_HOME"], exist_ok=True)
 
+# Workaround for kivy_deps.angle path resolution issue when loaded from .apworld
+# Create stub modules in sys.modules to prevent the real ones from being imported
+if sys.platform == "win32":
+    import types
+    # Create dummy kivy_deps module
+    if 'kivy_deps' not in sys.modules:
+        kivy_deps_module = types.ModuleType('kivy_deps')
+        kivy_deps_module.__path__ = []
+        sys.modules['kivy_deps'] = kivy_deps_module
+    
+    # Create dummy kivy_deps.angle module with a valid __path__
+    if 'kivy_deps.angle' not in sys.modules:
+        angle_module = types.ModuleType('kivy_deps.angle')
+        angle_module.__path__ = []
+        angle_module.dep_bins = []  # Empty list of dependency binaries
+        sys.modules['kivy_deps.angle'] = angle_module
+    
+    # Similarly for kivy_deps.glew and kivy_deps.sdl2
+    if 'kivy_deps.glew' not in sys.modules:
+        glew_module = types.ModuleType('kivy_deps.glew')
+        glew_module.__path__ = []
+        glew_module.dep_bins = []
+        sys.modules['kivy_deps.glew'] = glew_module
+    
+    if 'kivy_deps.sdl2' not in sys.modules:
+        sdl2_module = types.ModuleType('kivy_deps.sdl2')
+        sdl2_module.__path__ = []
+        sdl2_module.dep_bins = []
+        sys.modules['kivy_deps.sdl2'] = sdl2_module
+
 from kivy.config import Config
 
 Config.set("input", "mouse", "mouse,disable_multitouch")

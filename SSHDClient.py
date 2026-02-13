@@ -121,6 +121,16 @@ except ImportError:
     except ImportError:
         HintSystem = None
 
+# Import Archipelago item system integration
+try:
+    from .ItemSystemIntegration import GameItemSystem
+except ImportError:
+    try:
+        from ItemSystemIntegration import GameItemSystem
+    except ImportError:
+        GameItemSystem = None
+        logger.warning("ItemSystemIntegration not found - falling back to direct memory writes")
+
 
 # Memory signature to find SSHD base address
 MEMORY_SIGNATURE = bytes.fromhex("00000000080000004D4F443088BD8101")
@@ -536,6 +546,9 @@ class SSHDContext(CommonContext):
         # Initialize hint system
         self.hints = HintSystem() if HintSystem else None
         
+        # Initialize Archipelago item system (buffer-based with animations)
+        self.game_item_system = None
+        
         # Progressive item counters
         self.progressive_counts = {
             "Progressive Sword": 0,
@@ -669,19 +682,39 @@ class SSHDContext(CommonContext):
     
     def give_item_to_player(self, item_name: str, item_id: int) -> bool:
         """
-        Give an item to the player by writing to memory.
+        Give an item to the player using the game's native item system.
         
-        Writes to BOTH regions:
-        - Uncommitted (0x182E170): Temporary runtime state
-        - Committed (via File Manager): Actual save file (persists across sessions)
+        Uses a memory buffer that the game monitors every frame. When items are written
+        to the buffer, the game spawns them with proper animations, models, and sound effects.
         
-        Items will appear IMMEDIATELY in inventory AND persist on save.
+        Falls back to direct memory writes if GameItemSystem is not available.
         
         Returns True if successful, False if failed.
         """
         if not self.memory.connected or not self.memory.base_address:
             logger.debug(f"Cannot give item: not connected to game")
             return False
+        
+        # Try using the new item system with animations
+        if GameItemSystem:
+            try:
+                # Initialize on first use
+                if not self.game_item_system:
+                    self.game_item_system = GameItemSystem(self.memory)
+                
+                # Use the integrated system (spawns items with animations)
+                success = self.game_item_system.give_item_by_name(item_name)
+                if success:
+                    logger.info(f"Gave {item_name} with animation!")
+                else:
+                    logger.warning(f"Failed to give {item_name} via item system")
+                return success
+            except Exception as e:
+                logger.warning(f"Item system error for {item_name}: {e}, falling back to direct write")
+                # Fall through to legacy system
+        
+        # Fallback: Legacy direct memory write system (no animations)
+        logger.debug(f"Using legacy direct memory write for {item_name}")
         
         try:
             if item_name not in ITEM_TABLE:
@@ -749,9 +782,9 @@ class SSHDContext(CommonContext):
                     return True
             
             if success:
-                logger.info(f"✅ Gave item: {item_name}")
+                logger.info(f"Gave item: {item_name}")
             else:
-                logger.warning(f"⚠️ Failed to give item: {item_name}")
+                logger.warning(f"Failed to give item: {item_name}")
             
             return success
             

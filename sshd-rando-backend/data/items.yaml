@@ -1430,6 +1430,14 @@
   shop_arc_name: DesertRobot
   shop_model_name: DesertRobot
   advancement: true
+- id: 216
+  name: Archipelago Item
+  types:
+    - Major Items
+  oarc: GetKobunALetter
+  shop_arc_name: GetKobunALetter
+  shop_model_name: GetKobunALetter
+  advancement: false
 
 # - id: 240+ == traps
 

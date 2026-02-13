@@ -207,75 +207,83 @@ def create_sshd_rando_config(settings_dict: Dict[str, Any], output_dir: Path, se
     for setting_name in get_all_settings_info():
         setting_map.settings[setting_name] = create_default_setting(setting_name)
     
-    # Now override with archipelago settings
-    # Map setting names from archipelago to sshd-rando
-    # NOTE: starting_tablets, starting_sword are handled separately below
-    setting_name_map = {
-        "required_dungeon_count": "required_dungeon_count",
-        "triforce_required": "triforce_required",
-        "triforce_shuffle": "triforce_shuffle",
-        "gate_of_time_sword_requirement": "gate_of_time_sword_requirement",
-        "gate_of_time_dungeon_requirements": "gate_of_time_dungeon_requirements",
-        "imp2_skip": "imp2_skip",
-        "skip_horde": "skip_horde",
-        "skip_ghirahim3": "skip_ghirahim3",
-        "gratitude_crystal_shuffle": "gratitude_crystal_shuffle",
-        "stamina_fruit_shuffle": "stamina_fruit_shuffle",
-        "npc_closet_shuffle": "npc_closet_shuffle",
-        "hidden_item_shuffle": "hidden_item_shuffle",
-        "rupee_shuffle": "rupee_shuffle",
-        "goddess_chest_shuffle": "goddess_chest_shuffle",
-        "trial_treasure_shuffle": "trial_treasure_shuffle",
-        "tadtone_shuffle": "tadtone_shuffle",
-        "gossip_stone_treasure_shuffle": "gossip_stone_treasure_shuffle",
-        "small_key_shuffle": "small_key_shuffle",
-        "boss_key_shuffle": "boss_key_shuffle",
-        "map_shuffle": "map_shuffle",
-        "randomize_entrances": "randomize_entrances",
-        "randomize_dungeons": "randomize_dungeons",
-        "randomize_trials": "randomize_trials",
-        # "starting_tablets": handled manually via starting_inventory below
-        # "starting_sword": handled manually via starting_inventory below
-        # "start_with_sailcloth": handled manually via starting_inventory below
-        "open_lake_floria_gate": "open_lake_floria_gate",
-        "open_thunderhead": "open_thunderhead",
-
-        "skip_skykeep_door_cutscene": "skip_skykeep_door_cutscene",
-        "skip_harp_playing": "skip_harp_playing",
-        "skip_misc_cutscenes": "skip_misc_cutscenes",
-        "music_randomization": "music_randomization",
-        "cutoff_game_over_music": "cutoff_game_over_music",
-        "no_spoiler_log": "no_spoiler_log",
-        "empty_unreachable_locations": "empty_unreachable_locations",
-        "damage_multiplier": "damage_multiplier",
-        "add_junk_items": "add_junk_items",
-        "junk_item_rate": "junk_item_rate",
-        "progressive_items": "progressive_items",
-        "logic_rules": "logic_rules",
-        "item_pool": "item_pool",
+    # Now override with settings from settings_dict
+    # Apply ALL settings that exist in both settings_dict and sshd-rando settings
+    # Skip special keys that are handled separately or are metadata
+    skip_keys = {
+        'extract_path', 'setting_string', 'seed', 'generate_spoiler_log', 
+        'use_plandomizer', 'plandomizer_file', 'custom_starting_items',
+        '_setting_string_starting_items', '_sshd_hash',
+        'starting_inventory', 'excluded_locations', 'excluded_hint_locations',
+        'mixed_entrance_pools', 'other_mods'
     }
     
-    # Apply settings
-    for ap_key, rando_key in setting_name_map.items():
-        if ap_key in settings_dict and rando_key in setting_map.settings:
-            value = settings_dict[ap_key]
-            setting = setting_map.settings[rando_key]
+    print(f"[SSHDRWrapper] Applying settings from settings_dict ({len(settings_dict)} total settings)")
+    applied_count = 0
+    skipped_count = 0
+    
+    for setting_key, value in settings_dict.items():
+        # Skip special keys
+        if setting_key in skip_keys:
+            continue
+            
+        # Check if this setting exists in sshd-rando
+        if setting_key in setting_map.settings:
+            setting = setting_map.settings[setting_key]
             
             # Convert Python booleans to string values that sshd-rando expects
             if isinstance(value, bool):
-                value_str = "true" if value else "false"
+                value_str = "on" if value else "off"
+            elif isinstance(value, (int, float)):
+                value_str = str(value)
+            elif isinstance(value, list):
+                # Handle lists (like starting_inventory items)
+                value_str = str(value)
             else:
                 value_str = str(value)
             
-            # Find the option index for this value
+            # Find the option index for this value in the setting's valid options
             if setting.info and value_str in setting.info.options:
                 option_index = setting.info.options.index(value_str)
                 setting.update_current_value(option_index)
+                applied_count += 1
+            else:
+                # Value not found in options - might be "random" or invalid
+                # Try to apply it anyway if it's a valid string option
+                if setting.info:
+                    # Check if "random" is a valid option
+                    if value_str == "random" and "random" in setting.info.options:
+                        option_index = setting.info.options.index("random")
+                        setting.update_current_value(option_index)
+                        applied_count += 1
+                    else:
+                        print(f"[SSHDRWrapper] Warning: Value '{value_str}' not valid for setting '{setting_key}'. Valid options: {setting.info.options[:5]}...")
+                        skipped_count += 1
+        else:
+            # Setting doesn't exist in sshd-rando
+            skipped_count += 1
+    
+    print(f"[SSHDRWrapper] Applied {applied_count} settings, skipped {skipped_count} (not applicable or invalid)")
+    
+    # Handle starting_inventory from config.yaml (if present)
+    # This is a list like: ["Progressive Pouch", "Scrapper", "Hylian Shield", ...]
+    if "starting_inventory" in settings_dict:
+        starting_items_list = settings_dict["starting_inventory"]
+        if isinstance(starting_items_list, list):
+            print(f"[SSHDRWrapper] Processing starting_inventory from config.yaml ({len(starting_items_list)} items)")
+            for item_name in starting_items_list:
+                # Add each item to the starting inventory
+                if item_name in setting_map.starting_inventory:
+                    setting_map.starting_inventory[item_name] += 1
+                else:
+                    setting_map.starting_inventory[item_name] = 1
+            print(f"[SSHDRWrapper] Added {len(starting_items_list)} items to starting_inventory")
     
     # CRITICAL: Manually populate starting_inventory for starting_tablets and starting_sword
     # The sshd-rando backend uses setting_map.starting_inventory, NOT the settings directly
     # Handle starting_tablets (directly add to starting_inventory)
-    if "starting_tablets" in settings_dict:
+    # NOTE: Only do this if we're using Archipelago YAML settings (not from config.yaml)
+    if "starting_tablets" in settings_dict and "starting_inventory" not in settings_dict:
         tablet_count = int(settings_dict["starting_tablets"])
         # Randomize tablet selection for counts 1-2, use fixed order for 0 or 3
         tablet_names = ["Emerald Tablet", "Ruby Tablet", "Amber Tablet"]
@@ -289,7 +297,8 @@ def create_sshd_rando_config(settings_dict: Dict[str, Any], output_dir: Path, se
             setting_map.starting_inventory[tablet] = 1
     
     # Handle starting_sword (add Progressive Sword based on level)
-    if "starting_sword" in settings_dict:
+    # NOTE: Only do this if we're using Archipelago YAML settings (not from config.yaml)
+    if "starting_sword" in settings_dict and "starting_inventory" not in settings_dict:
         sword_value = settings_dict["starting_sword"]
         sword_levels = {
             "none": 0,
@@ -567,12 +576,12 @@ def overlay_multiworld_items(world: Any, location_item_mapping: Dict[str, str]) 
     Overlay Archipelago multiworld items onto the sshd-rando generated world.
     
     This replaces items in SSHD locations with Archipelago multiworld items.
-    Cross-world items are replaced with Cawlin's Letter containers.
+    Cross-world items are replaced with Archipelago Item (ID 216) containers.
     
     Args:
         world: sshd-rando World object with filled locations
         location_item_mapping: Dict[sshd_location_name] = ap_item_name
-                              Maps SSHD location names to Archipelago item names or "Cawlin's Letter"
+                              Maps SSHD location names to Archipelago item names
     
     Returns:
         Dictionary with overlay results:
@@ -616,17 +625,17 @@ def overlay_multiworld_items(world: Any, location_item_mapping: Dict[str, str]) 
     
     print(f"[SSHDRWrapper] Processing {len(world.location_table)} locations from location_table")
     
-    # Debug: Check if Cawlin's Letter is in item_table (remember: apostrophes get stripped)
-    cawlin_lookup = "Cawlins Letter"  # sshd-rando strips apostrophes
-    if cawlin_lookup in world.item_table:
-        print(f"[SSHDRWrapper] ✓ Cawlin's Letter found in item_table (as '{cawlin_lookup}')")
+    # Debug: Check if Archipelago Item is in item_table
+    ap_item_lookup = "Archipelago Item"
+    if ap_item_lookup in world.item_table:
+        print(f"[SSHDRWrapper] ✓ Archipelago Item found in item_table")
     else:
-        print(f"[SSHDRWrapper] ✗ Cawlin's Letter NOT in item_table!")
+        print(f"[SSHDRWrapper] ✗ Archipelago Item NOT in item_table!")
         print(f"[SSHDRWrapper] Available items (first 30): {list(world.item_table.keys())[:30]}...")
     
     # Track mapping distribution
-    cawlin_in_mapping = sum(1 for v in location_item_mapping.values() if v == "Cawlin's Letter")
-    print(f"[SSHDRWrapper] Mapping contains {cawlin_in_mapping} Cawlin's Letter entries")
+    crossworld_in_mapping = sum(1 for v in location_item_mapping.values() if v not in world.item_table)
+    print(f"[SSHDRWrapper] Mapping contains approximately {crossworld_in_mapping} cross-world item entries")
     
     # Iterate through all locations in the mapping
     shop_locations_skipped = 0
@@ -657,25 +666,28 @@ def overlay_multiworld_items(world: Any, location_item_mapping: Dict[str, str]) 
             # Get or create the replacement item
             new_item = None
             
+            # Check if this is explicitly an Archipelago Item (cross-world placeholder)
+            is_cross_world = (target_item_name == "Archipelago Item")
+            
             if target_item_lookup in world.item_table:
                 new_item = world.item_table[target_item_lookup]
+                # Log first few cross-world replacements
+                if is_cross_world and cross_world_count <= 5:
+                    print(f"[SSHDRWrapper] Using Archipelago Item for cross-world item at {location_name}")
             
-            # Check if this is a cross-world item (either explicit or fallback)
-            is_cross_world = target_item_name == "Cawlin's Letter"
-            
-            # If item not found, use Cawlin's Letter as fallback (cross-world item placeholder)
+            # If item not found, use Archipelago Item as fallback (cross-world item placeholder)
             if new_item is None:
-                target_item_lookup = "Cawlins Letter"  # apostrophe stripped
+                target_item_lookup = "Archipelago Item"
                 if target_item_lookup in world.item_table:
                     new_item = world.item_table[target_item_lookup]
                     is_cross_world = True
-                    # Log first few replacements
+                    # Log first few fallback replacements
                     if cross_world_count <= 5:
-                        print(f"[SSHDRWrapper] Using Cawlin's Letter for cross-world item '{target_item_name}' at {location_name}")
+                        print(f"[SSHDRWrapper] Fallback: Using Archipelago Item for unmapped item '{target_item_name}' at {location_name}")
             
             # Safety check: ensure we have a valid item before replacing
             if new_item is None:
-                print(f"[SSHDRWrapper] ERROR: Could not find item '{target_item_lookup}' OR Cawlin's Letter in item_table!")
+                print(f"[SSHDRWrapper] ERROR: Could not find item '{target_item_lookup}' OR Archipelago Item in item_table!")
                 print(f"[SSHDRWrapper] Available items (first 30): {list(world.item_table.keys())[:30]}")
                 unmapped_count += 1
                 continue
@@ -694,9 +706,9 @@ def overlay_multiworld_items(world: Any, location_item_mapping: Dict[str, str]) 
                 # Count cross-world items
                 if is_cross_world:
                     cross_world_count += 1
-                    # Debug first few Cawlin replacements
+                    # Debug first few replacements
                     if cross_world_count <= 3:
-                        print(f"[SSHDRWrapper] Replaced with Cawlin's Letter at {location_name}")
+                        print(f"[SSHDRWrapper] Replaced with Archipelago Item at {location_name}")
                 
             except Exception as e:
                 print(f"[SSHDRWrapper] Warning: Failed to set item at {location_name}: {e}")
@@ -708,7 +720,7 @@ def overlay_multiworld_items(world: Any, location_item_mapping: Dict[str, str]) 
     results["cross_world_items"] = cross_world_count
     results["unmapped_locations"] = unmapped_count
     results["protected_locations_skipped"] = protected_count
-    print(f"[SSHDRWrapper] Overlay complete: {replaced_count} items replaced ({cross_world_count} Cawlin's Letters) from {results['total_locations']} total")
+    print(f"[SSHDRWrapper] Overlay complete: {replaced_count} items replaced ({cross_world_count} Archipelago Items) from {results['total_locations']} total")
     
     return results
 

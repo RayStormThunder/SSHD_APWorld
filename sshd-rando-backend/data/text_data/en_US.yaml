@@ -5,10 +5,10 @@
   standard: "You found Gondo's robot, <y<Scrapper>>!
     \n\n\n\nBe sure to take care of him.\n...even if he's a little mean."
 
-- name: Cawlin's Letter Item Get Text Page 1
+- name: Archipelago Item Get Text Page 1
   standard: "You received an <y<Archipelago item>>!"
 
-- name: Cawlin's Letter Item Get Text Page 2
+- name: Archipelago Item Get Text Page 2
   standard: "This is an item for another player.\nIt will be sent to their game!"
 
 - name: Some Tadtones Collected text
@@ -929,9 +929,15 @@
   plurality: Singular
 
 - name: Cawlin's Letter
+  standard: Cawlin's Letter
+  pretty: <Cawlin's Letter>
+  cryptic: a <r<love letter>>
+  plurality: Singular
+
+- name: Archipelago Item
   standard: Archipelago item
   pretty: an <Archipelago item>
-  cryptic: a <r<love letter>>
+  cryptic: an <r<item for another world>>
   plurality: Singular
 
 - name: Beedle's Insect Cage

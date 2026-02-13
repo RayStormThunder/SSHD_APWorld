@@ -6,6 +6,7 @@ use crate::color;
 use crate::debug;
 use crate::fix;
 use crate::input;
+use crate::item;
 use crate::mem;
 
 use core::arch::asm;
@@ -77,6 +78,9 @@ pub extern "C" fn main_loop_inject() -> *mut c_void {
     }
 
     color::handle_colors();
+
+    // Archipelago - Check for items to give from the buffer
+    item::archipelago_check_item_buffer();
 
     fix::apply_loftwing_speed_override();
 

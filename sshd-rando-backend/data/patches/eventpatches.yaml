@@ -84,34 +84,33 @@
       param3: 3
       param4: Scrapper Item Get Text
 
-  - name: Cawlin's Letter Item Get Text Page 1
-    type: textpatch
-    index: 158
-    textboxtype: 5
-    unk2: 1
-  - name: Cawlin's Letter Entry
+  - name: Archipelago Item Entry
     type: entryadd
     entry:
-      name: "003_158"
-      value: Show Cawlin's Letter Text Flow
-  - name: Show Cawlin's Letter Text Flow
-    type: flowadd
-    flow:
-      type: type1
-      next: Show Cawlin's Letter Item Get Text Page 2
-      param3: 3
-      param4: 158
-  - name: Cawlin's Letter Item Get Text Page 2
+      name: "003_216"
+      value: Show Archipelago Item Text Flow
+  - name: Archipelago Item Get Text Page 1
     type: textadd
     textboxtype: 5
     unk2: 1
-  - name: Show Cawlin's Letter Item Get Text Page 2
+  - name: Show Archipelago Item Text Flow
+    type: flowadd
+    flow:
+      type: type1
+      next: Show Archipelago Item Get Text Page 2
+      param3: 3
+      param4: Archipelago Item Get Text Page 1
+  - name: Archipelago Item Get Text Page 2
+    type: textadd
+    textboxtype: 5
+    unk2: 1
+  - name: Show Archipelago Item Get Text Page 2
     type: flowadd
     flow:
       type: type1
       next: -1
       param3: 3
-      param4: Cawlin's Letter Item Get Text Page 2
+      param4: Archipelago Item Get Text Page 2
 
   - name: Give Scrapper Storyflag
     type: flowadd

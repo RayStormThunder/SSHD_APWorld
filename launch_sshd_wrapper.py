@@ -38,9 +38,16 @@ if lib_dir.exists():
     
     # Add kivy-deps DLL directories to PATH (Windows only)
     if sys.platform == "win32":
-        # Look for kivy-deps SDL2 and GLEW DLLs
-        for dep_name in ['sdl2', 'glew']:
-            dep_path = lib_dir / f'kivy_deps.{dep_name}' / 'share' / f'kivy_deps-{dep_name}' / 'bin'
+        # Try multiple possible locations for kivy-deps DLLs
+        possible_paths = [
+            lib_dir / 'kivy_deps' / 'sdl2' / 'bin',
+            lib_dir / 'kivy_deps.sdl2' / 'share' / 'kivy_deps-sdl2' / 'bin',
+            lib_dir / 'share' / 'sdl2' / 'bin',
+            lib_dir / 'kivy_deps' / 'glew' / 'bin',
+            lib_dir / 'kivy_deps.glew' / 'share' / 'kivy_deps-glew' / 'bin',
+            lib_dir / 'share' / 'glew' / 'bin',
+        ]
+        for dep_path in possible_paths:
             if dep_path.exists():
                 os.environ['PATH'] = str(dep_path) + os.pathsep + os.environ.get('PATH', '')
 

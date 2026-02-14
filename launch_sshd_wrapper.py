@@ -24,6 +24,17 @@ if not APWORLD_PATH.exists():
     print(f"Expected location: {apworld_dir}")
     sys.exit(1)
 
+# Add Archipelago lib directory to sys.path for dependencies
+if sys.platform == "win32":
+    lib_dir = Path("C:/ProgramData/Archipelago/lib")
+elif sys.platform == "linux":
+    lib_dir = Path.home() / ".local" / "share" / "Archipelago" / "lib"
+else:
+    lib_dir = Path.home() / "Library" / "Application Support" / "Archipelago" / "lib"
+
+if lib_dir.exists():
+    sys.path.insert(0, str(lib_dir))
+
 sys.path.insert(0, str(APWORLD_PATH))
 
 # Extract and execute SSHDClient

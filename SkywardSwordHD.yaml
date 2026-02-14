@@ -1,6 +1,11 @@
 name: Player1
+description: Default Skyward Sword HD Archipelago Template
+
 game: Skyward Sword HD
-description: Skyward Sword HD Archipelago - Complete Configuration
+requires:
+  version: 0.6.6 # Version of Archipelago required for this yaml to work as expected.
+  game:
+    Skyward Sword HD: 1.0.0
 
 Skyward Sword HD:
 
@@ -27,6 +32,16 @@ Skyward Sword HD:
   
   # Death Link: When you die, everyone dies (and vice versa)
   death_link: false
+  
+  # Progression Balancing
+  # Controls how much to front-load progression items to reduce waiting in multiworld
+  # 0: Completely random placement (no balancing)
+  # 25: Slight bias toward early game
+  # 50: Balanced placement (recommended for multiworld)
+  # 75: Strong bias toward early game
+  # 99: Maximum early placement
+  # Higher values help prevent players from waiting on others for key items
+  progression_balancing: 50
 
 
 

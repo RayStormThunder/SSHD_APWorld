@@ -3,6 +3,7 @@ Launcher wrapper for SSHD Archipelago Client (Cross-platform)
 """
 import zipfile
 import sys
+import os
 from pathlib import Path
 
 # Find .apworld file (cross-platform)
@@ -34,6 +35,14 @@ else:
 
 if lib_dir.exists():
     sys.path.insert(0, str(lib_dir))
+    
+    # Add kivy-deps DLL directories to PATH (Windows only)
+    if sys.platform == "win32":
+        # Look for kivy-deps SDL2 and GLEW DLLs
+        for dep_name in ['sdl2', 'glew']:
+            dep_path = lib_dir / f'kivy_deps.{dep_name}' / 'share' / f'kivy_deps-{dep_name}' / 'bin'
+            if dep_path.exists():
+                os.environ['PATH'] = str(dep_path) + os.pathsep + os.environ.get('PATH', '')
 
 sys.path.insert(0, str(APWORLD_PATH))
 

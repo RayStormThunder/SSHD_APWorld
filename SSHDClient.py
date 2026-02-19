@@ -146,12 +146,12 @@ OFFSET_NEXT_STAGE = 0x2BF9904      # Next stage info
 
 # Static flag addresses (absolute, not relative to player)
 OFFSET_STORY_FLAGS_STATIC = 0x182E1F8   # Static story flags (256 bytes)
-OFFSET_SCENE_FLAGS_STATIC = 0x182DF00   # Static scene flags (16 bytes)
+OFFSET_SCENE_FLAGS_STATIC = 0x13B100    # Static scene flags (16 bytes)
 OFFSET_SCENE_FLAGS = 0x9E4              # Scene flags within player structure
-OFFSET_TEMP_FLAGS_STATIC = 0x182DF10    # Static temp flags (8 bytes)
-OFFSET_ZONE_FLAGS_STATIC = 0x182DF18    # Static zone flags (504 bytes)
-OFFSET_ITEM_FLAGS_STATIC = 0x182E170    # Static item flags (128 bytes)
-OFFSET_DUNGEON_FLAGS_STATIC = 0x182E128 # Static dungeon flags (16 bytes)
+OFFSET_TEMP_FLAGS_STATIC = 0x13B110     # Static temp flags (8 bytes)
+OFFSET_ZONE_FLAGS_STATIC = 0x13B118     # Static zone flags (504 bytes)
+OFFSET_ITEM_FLAGS_STATIC = 0x12E170     # Static item flags (128 bytes)
+OFFSET_DUNGEON_FLAGS_STATIC = 0x12E128  # Static dungeon flags (16 bytes)
 
 # File Manager structure (cheat table shows this at +5AEAD44)
 OFFSET_FILE_MANAGER_ACTUAL = 0x5AEAD44  # Actual File Mgr base
@@ -169,7 +169,7 @@ OFFSET_ACTION_FLAGS = 0x460        # Action flags
 OFFSET_ACTION_FLAGS_MORE = 0x464   # More action flags
 OFFSET_GAME_STATE = 0x2BF98A0      # Game state flags (dialogue, cutscene, etc.)
 OFFSET_B_WHEEL_EQUIPPED = 0x6408   # B-wheel equipped item
-OFFSET_CURRENT_HEALTH = 0x5306     # Current hearts (2 bytes)
+OFFSET_CURRENT_HEALTH = 0x5AF005A  # Current hearts (2 bytes) - from File Mgr->FA structure (CE: base+0x5AF005A)
 OFFSET_HEALTH_CAPACITY = 0x5302    # Max hearts (2 bytes)
 OFFSET_STAMINA = 0x64D8            # Stamina gauge
 
@@ -180,31 +180,85 @@ OFFSET_STAGE_ROOM = 0x22           # Room ID
 OFFSET_STAGE_ENTRANCE = 0x24       # Entrance ID
 OFFSET_STAGE_NIGHT = 0x25          # Night flag
 
-# Scene name to scene flag base address mapping (absolute addresses in SSHD memory)
-# These are the absolute memory addresses where scene flags are stored
-# Scene flags start at 0x805A9F00 and are organized by scene
+# Scene name to scene flag base address mapping (base-relative offsets for SSHD)
+# These are the offsets from base_address where scene flags are stored
+# Scene flags are organized by scene in the static scene flag array
 SCENE_FLAG_ADDRESSES = {
-    "Skyloft": 0x805A9F00,              # Skyloft scene flags
-    "Sky": 0x805AA000,                  # Sky scene flags
-    "Sealed Grounds": 0x805AA100,       # Sealed Grounds
-    "Faron Woods": 0x805AA200,          # Faron Woods
-    "Lake Floria": 0x805AA300,          # Lake Floria
-    "Skyview": 0x805AA400,              # Skyview Temple
-    "Eldin Volcano": 0x805AA500,        # Eldin Volcano
-    "Earth Temple": 0x805AA600,         # Earth Temple
-    "Lanayru Desert": 0x805AA700,       # Lanayru Desert
-    "Lanayru Mining Facility": 0x805AA800,  # Lanayru Mining Facility
-    "Ancient Cistern": 0x805AA900,      # Ancient Cistern
-    "Sandship": 0x805AAA00,             # Sandship
-    "Fire Sanctuary": 0x805AAB00,       # Fire Sanctuary
-    "Sky Keep": 0x805AAC00,             # Sky Keep
+    "Skyloft": 0x182DF00,              # Skyloft scene flags (base-relative)
+    "Sky": 0x182DF10,                  # Sky scene flags
+    "Sealed Grounds": 0x182DF20,       # Sealed Grounds
+    "Faron Woods": 0x182DF30,          # Faron Woods
+    "Lake Floria": 0x182DF40,          # Lake Floria
+    "Skyview": 0x182DF50,              # Skyview Temple
+    "Eldin Volcano": 0x182DF60,        # Eldin Volcano
+    "Earth Temple": 0x182DF70,         # Earth Temple
+    "Lanayru Desert": 0x182DF80,       # Lanayru Desert
+    "Lanayru Mining Facility": 0x182DF90,  # Lanayru Mining Facility
+    "Ancient Cistern": 0x182DFA0,      # Ancient Cistern
+    "Sandship": 0x182DFB0,             # Sandship
+    "Fire Sanctuary": 0x182DFC0,       # Fire Sanctuary
+    "Sky Keep": 0x182DFD0,             # Sky Keep
 }
 
-# Story flags base address (absolute)
-STORY_FLAGS_BASE = 0x805A9AD0
+# Story flags base address (base-relative)
+STORY_FLAGS_BASE = OFFSET_STORY_FLAGS_STATIC
 
-# Scene flags base address (absolute)
-SCENE_FLAGS_BASE = 0x805A9F00
+# Scene flags base address (base-relative)
+SCENE_FLAGS_BASE = OFFSET_SCENE_FLAGS_STATIC
+
+# Stage name mapping (internal codes to friendly names)
+STAGE_NAMES = {
+    "F000": "Skyloft",
+    "F001r": "Knight Academy",
+    "F002r": "Bazaar",
+    "F004r": "Sparring Hall",
+    "F005r": "Isle of Songs",
+    "F006r": "Lumpy Pumpkin",
+    "F007r": "Batreaux's House",
+    "F008r": "Bamboo Island",
+    "F009r": "Beedle's Airshop",
+    "F010r": "Peatrice's House",
+    "F012r": "Orielle & Parrow's House",
+    "F013r": "Pippit's House",
+    "F014r": "Kukiel's House",
+    "F015r": "Potion Shop",
+    "F016r": "Scrap Shop",
+    "F017r": "Fortune Teller",
+    "F018r": "Gear Shop",
+    "F019r": "Item Check",
+    "F020": "The Sky",
+    "F021": "Thunderhead",
+    "F023": "Inside the Thunderhead",
+    "F100": "Faron Woods",
+    "F101": "Deep Woods",
+    "F102": "Lake Floria",
+    "F103": "Flooded Faron Woods",
+    "F200": "Eldin Volcano",
+    "F201": "Volcano Summit",
+    "F210": "Mogma Turf",
+    "F211": "Thrill Digger",
+    "F300": "Lanayru Desert",
+    "F301": "Lanayru Sand Sea",
+    "F302": "Lanayru Gorge",
+    "F303": "Lanayru Caves",
+    "D000": "Skyview Temple",
+    "D100": "Earth Temple",
+    "D200": "Lanayru Mining Facility",
+    "D201": "Temple of Time",
+    "D300": "Ancient Cistern",
+    "D301": "Sandship",
+    "D302": "Pirate Stronghold",
+    "D003": "Fire Sanctuary",
+    "D003_1": "Fire Sanctuary (Underwater)",
+    "S000": "Sealed Grounds",
+    "S100": "Hylia's Temple",
+    "S200": "Sealed Temple",
+    "B000": "Sky Keep",
+    "B100": "Lanayru Gorge Silent Realm",
+    "B101": "Faron Silent Realm",
+    "B102": "Eldin Silent Realm",
+    "B103": "Skyloft Silent Realm",
+}
 
 
 class RyujinxMemoryError(Exception):
@@ -303,54 +357,106 @@ class RyujinxMemoryReader:
             return False
     
     def _scan_memory_sync(self) -> bool:
-        """Synchronous memory scanning (runs in thread pool)."""
+        """Synchronous memory scanning using VirtualQueryEx for precise region enumeration."""
         try:
+            import ctypes
+            
             start_time = time.time()
-            print(f"[DEBUG] Starting memory scan at address 0x10000")
+            print(f"[DEBUG] Starting VirtualQueryEx-based memory scan")
             
-            # Scan memory regions
-            address = 0x10000
+            # Windows memory constants
+            MEM_COMMIT = 0x1000
+            # Readable page protections (excludes PAGE_NOACCESS=0x01, PAGE_EXECUTE=0x10)
+            READABLE_PROTECTIONS = {0x02, 0x04, 0x08, 0x20, 0x40, 0x80}
+            PAGE_GUARD = 0x100
+
+            # 64-bit MEMORY_BASIC_INFORMATION (48 bytes on Windows 10 x64)
+            class MEMORY_BASIC_INFORMATION(ctypes.Structure):
+                _fields_ = [
+                    ("BaseAddress",      ctypes.c_uint64),
+                    ("AllocationBase",   ctypes.c_uint64),
+                    ("AllocationProtect",ctypes.c_uint32),
+                    ("__alignment1",     ctypes.c_uint32),  # PartitionId+pad on Win10 1703+
+                    ("RegionSize",       ctypes.c_uint64),
+                    ("State",            ctypes.c_uint32),
+                    ("Protect",          ctypes.c_uint32),
+                    ("Type",             ctypes.c_uint32),
+                    ("__alignment2",     ctypes.c_uint32),
+                ]
+
+            kernel32 = ctypes.windll.kernel32
+            process_handle = self.pm.process_handle
+            chunk_size = 1024 * 1024  # 1 MB
             max_address = 0x7FFFFFFFFFFF
-            chunk_size = 1024 * 1024  # 1 MB chunks (same as test script - much faster!)
+            address = 0x10000
             chunks_scanned = 0
-            
+            regions_scanned = 0
+            mbi = MEMORY_BASIC_INFORMATION()
+
             while address < max_address:
-                try:
-                    # Read a chunk of memory
-                    # print(f"[DEBUG] Attempting to read chunk at 0x{address:X}, size: {min(chunk_size, max_address - address):,} bytes")
-                    data = self.pm.read_bytes(address, min(chunk_size, max_address - address))
-                    # print(f"[DEBUG] Successfully read chunk, searching for signature...")
-                    chunks_scanned += 1
-                    
-                    # Log progress every 10 chunks
-                    if chunks_scanned % 10 == 0:
-                        print(f"[DEBUG] Scanned {chunks_scanned} chunks, current address: 0x{address:X}")
-                    
-                    # Search for signature
-                    offset = data.find(MEMORY_SIGNATURE)
-                    if offset != -1:
-                        self.base_address = address + offset
-                        elapsed = time.time() - start_time
-                        print(f"[SUCCESS] Found SSHD base address: 0x{self.base_address:X} (took {elapsed:.1f}s, scanned {chunks_scanned} chunks)")
-                        logger.info(f"Found SSHD base address: 0x{self.base_address:X} (took {elapsed:.1f}s)")
-                        return True
-                    
-                    address += chunk_size
-                    
-                except pymem.exception.MemoryReadError as e:
-                    # Skip inaccessible memory regions - jump ahead to find next readable region
-                    # print(f"[DEBUG] MemoryReadError at 0x{address:X}, skipping ahead 64 MB")
-                    address += chunk_size * 64  # Skip 64 MB ahead like test script
+                # Query exact boundaries and attributes of the region at 'address'
+                result = kernel32.VirtualQueryEx(
+                    process_handle,
+                    ctypes.c_uint64(address),
+                    ctypes.byref(mbi),
+                    ctypes.sizeof(mbi)
+                )
+
+                if result == 0:
+                    address += 0x1000  # query failed, advance one page
                     continue
-                except Exception as e:
-                    print(f"[DEBUG] Unexpected error at 0x{address:X}: {e}, skipping ahead")
-                    address += chunk_size * 64
+
+                region_base = mbi.BaseAddress
+                region_size = mbi.RegionSize
+
+                if region_size == 0:
+                    address += 0x1000
                     continue
-            
-            print(f"[FAIL] Signature not found after scanning {chunks_scanned} chunks")
+
+                # Only read committed, readable pages
+                base_protect = mbi.Protect & 0xFF  # strip modifier flags
+                is_committed = (mbi.State == MEM_COMMIT)
+                is_readable  = (base_protect in READABLE_PROTECTIONS) and not (mbi.Protect & PAGE_GUARD)
+
+                if is_committed and is_readable:
+                    regions_scanned += 1
+                    region_end = region_base + region_size
+                    scan_pos   = region_base
+
+                    while scan_pos < region_end:
+                        to_read = min(chunk_size, region_end - scan_pos)
+                        try:
+                            data = self.pm.read_bytes(scan_pos, to_read)
+                            chunks_scanned += 1
+
+                            if chunks_scanned % 10 == 0:
+                                print(f"[DEBUG] Scanned {chunks_scanned} chunks, address: 0x{scan_pos:X}")
+
+                            sig_offset = data.find(MEMORY_SIGNATURE)
+                            if sig_offset != -1:
+                                signature_address = scan_pos + sig_offset
+                                # Base address IS where the signature starts
+                                # (matches Lua: baseAddress = foundList.Address[0])
+                                potential_base = signature_address
+                                elapsed = time.time() - start_time
+                                print(f"[SUCCESS] Found SSHD base address: 0x{potential_base:X}")
+                                print(f"[INFO] Signature at 0x{signature_address:X}, region protect={mbi.Protect:#x} type={mbi.Type:#x}")
+                                print(f"[SCAN] Took {elapsed:.1f}s, {chunks_scanned} chunks in {regions_scanned} regions")
+                                self.base_address = potential_base
+                                logger.info(f"Found SSHD base address: 0x{self.base_address:X} (took {elapsed:.1f}s)")
+                                return True
+                        except Exception:
+                            pass  # skip unreadable sub-chunks within this region
+
+                        scan_pos += to_read
+
+                # Advance precisely to next region — no large arbitrary jumps
+                address = region_base + region_size
+
+            print(f"[FAIL] Signature not found after {chunks_scanned} chunks in {regions_scanned} regions")
             logger.error("Could not find SSHD signature in memory")
             return False
-            
+
         except Exception as e:
             print(f"[ERROR] Exception during scan: {e}")
             logger.error(f"Error scanning memory: {e}")
@@ -366,7 +472,7 @@ class RyujinxMemoryReader:
             data = self.pm.read_bytes(self.base_address + offset, 4)
             return struct.unpack('<f', data)[0]
         except Exception as e:
-            logger.debug(f"Error reading float at 0x{offset:X}: {e}")
+            # Suppress repetitive error logging - normal when memory isn't loaded yet
             return None
     
     def read_int(self, offset: int) -> Optional[int]:
@@ -398,7 +504,7 @@ class RyujinxMemoryReader:
         try:
             return self.pm.read_uchar(self.base_address + offset)
         except Exception as e:
-            logger.debug(f"Error reading byte at 0x{offset:X}: {e}")
+            # Suppress repetitive error logging - these are normal when memory isn't loaded yet
             return None
     
     def read_string(self, offset: int, length: int = 32) -> Optional[str]:
@@ -424,7 +530,7 @@ class RyujinxMemoryReader:
             data = self.pm.read_bytes(self.base_address + offset, 8)
             return struct.unpack('<Q', data)[0]  # Little-endian 64-bit
         except Exception as e:
-            logger.debug(f"Error reading pointer at 0x{offset:X}: {e}")
+            # Suppress repetitive error logging - normal when memory isn't loaded yet
             return None
     
     def read_bytes(self, offset: int, length: int) -> Optional[bytes]:
@@ -565,7 +671,11 @@ class SSHDContext(CommonContext):
         self.current_stage: Optional[str] = None
         self.last_stage: Optional[str] = None
         self.last_hearts: Optional[int] = None
+        self.last_death_link: float = 0.0   # For DeathLink echo prevention
+        self.delivered_item_count: int = 0  # Items actually given (persisted across restarts)
+        self.connection_time: float = 0.0   # When we connected (to avoid false death on startup)
         self.slot_options: Dict[str, Any] = {}  # Player options from slot data
+        self.killed_by_deathlink: bool = False  # Flag to prevent sending death when killed by death link
         
         # Location checking via custom flags
         self.previous_custom_flags: Dict[int, int] = {}  # custom_flag_id -> last_state (0 or 1)
@@ -583,6 +693,43 @@ class SSHDContext(CommonContext):
         """Handle disconnection from server."""
         await super().connection_closed()
         logger.info("Connection to Archipelago server closed")
+
+    # Progress persistence (prevents re-giving items on client restart)
+    def _get_save_file(self) -> str:
+        import os
+        return os.path.join(os.path.expanduser("~"), "sshd_ap_progress.json")
+
+    def load_progress(self):
+        """Load persisted item delivery count for the current slot."""
+        import json, os
+        save_file = self._get_save_file()
+        try:
+            if os.path.exists(save_file) and self.auth:
+                with open(save_file, "r") as f:
+                    data = json.load(f)
+                count = data.get(self.auth, 0)
+                if count > self.delivered_item_count:
+                    self.delivered_item_count = count
+                    logger.info(f"[Progress] Restored delivery count: {self.delivered_item_count} items already given for {self.auth}")
+        except Exception as e:
+            logger.debug(f"[Progress] Could not load progress file: {e}")
+
+    def save_progress(self):
+        """Persist item delivery count so restarts don't re-give items."""
+        import json, os
+        save_file = self._get_save_file()
+        try:
+            existing: dict = {}
+            if os.path.exists(save_file):
+                with open(save_file, "r") as f:
+                    existing = json.load(f)
+            if self.auth:
+                existing[self.auth] = self.delivered_item_count
+            with open(save_file, "w") as f:
+                json.dump(existing, f)
+        except Exception as e:
+            logger.debug(f"[Progress] Could not save progress: {e}")
+
     
     def on_package(self, cmd: str, args: dict):
         """Handle incoming packages from the server."""
@@ -620,7 +767,7 @@ class SSHDContext(CommonContext):
             if custom_flag_mapping:
                 # Convert string keys back to integers (JSON serialization converts int keys to strings)
                 self.custom_flag_to_location = {int(k): v for k, v in custom_flag_mapping.items()}
-                logger.info(f"✅ Loaded custom flag mapping with {len(self.custom_flag_to_location)} flags")
+                logger.info(f"Loaded custom flag mapping with {len(self.custom_flag_to_location)} flags")
             else:
                 logger.warning("No custom flag mapping found in slot data - location detection disabled")
             
@@ -629,29 +776,56 @@ class SSHDContext(CommonContext):
             if location_to_flag_mapping:
                 # Convert string keys back to integers
                 self.location_to_custom_flag = {int(k): v for k, v in location_to_flag_mapping.items()}
-                logger.info(f"✅ Loaded {len(self.location_to_custom_flag)} location→flag mappings for vanilla pickups")
+                logger.info(f"Loaded {len(self.location_to_custom_flag)} location -> flag mappings for vanilla pickups")
             else:
                 logger.warning("No location→flag mapping found - vanilla pickups disabled")
+
+            # Enable DeathLink if the player configured it
+            death_link_enabled = slot_data.get("option_death_link", 0)  # Options use "option_" prefix
+            if death_link_enabled:
+                self.tags.add("DeathLink")
+                logger.info("DeathLink enabled! Deaths will be shared with other players.")
+                # Send ConnectUpdate to notify server of new tags
+                asyncio.create_task(self.send_msgs([{"cmd": "ConnectUpdate", "tags": list(self.tags)}]))
+                logger.debug(f"Sent ConnectUpdate with tags: {list(self.tags)}")
+            else:
+                self.tags.discard("DeathLink")
+                logger.info("DeathLink disabled.")
+
+            # Load persisted delivery count so we don't re-give items on reconnect
+            self.load_progress()
             
         elif cmd == "ReceivedItems":
             # Received items from other players
             start_index = args.get("index", 0)
             items_list = args.get("items", [])
             for i, network_item in enumerate(items_list):
+                item_global_index = start_index + i
+
+                # Skip items already delivered in a previous session
+                if item_global_index < self.delivered_item_count:
+                    logger.debug(f"[ReceivedItems] Skipping already-delivered item at index {item_global_index}")
+                    continue
+
                 item_id = network_item.item
+                location_id = network_item.location
                 location_player = network_item.player  # Player whose location was checked
                 
-                # Look up item name in OUR slot (SSHD) since we're receiving SSHD items
+                # Look up names - item is from OUR game (SSHD), location is from sender's game
                 item_name = self.item_names.lookup_in_slot(item_id, self.slot)
+                location_name = self.location_names.lookup_in_slot(location_id, location_player)
                 try:
                     sender_name = self.player_names[location_player]
                 except (KeyError, TypeError):
                     sender_name = f"Player {location_player}"
                 
+                logger.debug(f"[ReceivedItems] item_id={item_id}, item_name='{item_name}', location='{location_name}', from={sender_name}")
+                
                 # Add to queue to be given in-game
                 self.item_queue.append({
                     "id": item_id,
                     "name": item_name,
+                    "location": location_name,
                     "location_player": location_player,  # Who found it
                     "player_name": sender_name,
                     "index": start_index + i,
@@ -679,6 +853,21 @@ class SSHDContext(CommonContext):
                     self.hints.add_hint(location_id, hint_text)
                     
                     logger.info(f"Received hint: {hint_text}")
+        
+        elif cmd == "Bounced":
+            # Bounced packet - used for DeathLink
+            logger.debug(f"[Bounced] Received bounced packet: {args}")
+            tags = args.get("tags", [])
+            logger.debug(f"[Bounced] Tags: {tags}, DeathLink in tags: {'DeathLink' in tags}")
+            if "DeathLink" in tags:
+                data = args.get("data", {})
+                logger.debug(f"[Bounced] DeathLink data: {data}")
+                # Prevent echo: ignore if this bounce came from our own death
+                if data.get("time", 0) != self.last_death_link:
+                    logger.info(f"[Bounced] Triggering on_deathlink with data: {data}")
+                    self.on_deathlink(data)
+                else:
+                    logger.debug(f"[Bounced] Ignoring echo (time={data.get('time')} == last_death_link={self.last_death_link})")
     
     def give_item_to_player(self, item_name: str, item_id: int) -> bool:
         """
@@ -687,13 +876,61 @@ class SSHDContext(CommonContext):
         Uses a memory buffer that the game monitors every frame. When items are written
         to the buffer, the game spawns them with proper animations, models, and sound effects.
         
-        Falls back to direct memory writes if GameItemSystem is not available.
-        
         Returns True if successful, False if failed.
         """
         if not self.memory.connected or not self.memory.base_address:
             logger.debug(f"Cannot give item: not connected to game")
             return False
+        
+        logger.debug(f"[give_item_to_player] Received item_name='{item_name}', item_id={item_id}")
+        
+        # Handle progressive items - compute target tier WITHOUT incrementing yet.
+        # Counter only advances on a successful give to prevent wrong-tier retries.
+        actual_item_name = item_name
+        is_progressive = item_name in self.progressive_counts
+        next_count = (self.progressive_counts.get(item_name, 0) + 1) if is_progressive else 0
+        
+        if is_progressive:
+            count = next_count
+            if item_name == "Progressive Sword":
+                # Tier 1-4: Goddess Longsword → White Sword → Master Sword → True Master Sword
+                sword_tiers = ["Goddess Longsword", "Goddess White Sword", "Master Sword", "True Master Sword"]
+                actual_item_name = sword_tiers[min(count - 1, 3)]
+                logger.info(f"Progressive Sword #{count} -> {actual_item_name}")
+            elif item_name == "Progressive Bow":
+                # Tier 1: base Bow (game item 19), 2: Iron Bow, 3: Sacred Bow
+                bow_tiers = ["Progressive Bow", "Iron Bow", "Sacred Bow"]
+                actual_item_name = bow_tiers[min(count - 1, 2)]
+                logger.info(f"Progressive Bow #{count} -> {actual_item_name}")
+            elif item_name == "Progressive Slingshot":
+                # Tier 1: base Slingshot (game item 52), 2: Scattershot
+                slingshot_tiers = ["Progressive Slingshot", "Scattershot"]
+                actual_item_name = slingshot_tiers[min(count - 1, 1)]
+                logger.info(f"Progressive Slingshot #{count} -> {actual_item_name}")
+            elif item_name == "Progressive Beetle":
+                # Tier 1: base Beetle (game item 53), 2: Hook, 3: Quick, 4: Tough
+                beetle_tiers = ["Progressive Beetle", "Hook Beetle", "Quick Beetle", "Tough Beetle"]
+                actual_item_name = beetle_tiers[min(count - 1, 3)]
+                logger.info(f"Progressive Beetle #{count} -> {actual_item_name}")
+            elif item_name == "Progressive Mitts":
+                # Tier 1: base Mitts (game item 56), 2: Mogma Mitts
+                mitts_tiers = ["Progressive Mitts", "Mogma Mitts"]
+                actual_item_name = mitts_tiers[min(count - 1, 1)]
+                logger.info(f"Progressive Mitts #{count} -> {actual_item_name}")
+            elif item_name == "Progressive Bug Net":
+                # Tier 1: base Bug Net (game item 71), 2: Big Bug Net
+                net_tiers = ["Progressive Bug Net", "Big Bug Net"]
+                actual_item_name = net_tiers[min(count - 1, 1)]
+                logger.info(f"Progressive Bug Net #{count} -> {actual_item_name}")
+            elif item_name == "Progressive Wallet":
+                # Tier 1: Medium Wallet (game item 108), 2: Big, 3: Giant, 4: Tycoon
+                wallet_tiers = ["Progressive Wallet", "Big Wallet", "Giant Wallet", "Tycoon Wallet"]
+                actual_item_name = wallet_tiers[min(count - 1, 3)]
+                logger.info(f"Progressive Wallet #{count} -> {actual_item_name}")
+            elif item_name == "Progressive Pouch":
+                # All tiers give a Pouch Expansion (game item 113)
+                actual_item_name = "Pouch Expansion"
+                logger.info(f"Progressive Pouch #{count} -> {actual_item_name}")
         
         # Try using the new item system with animations
         if GameItemSystem:
@@ -703,384 +940,23 @@ class SSHDContext(CommonContext):
                     self.game_item_system = GameItemSystem(self.memory)
                 
                 # Use the integrated system (spawns items with animations)
-                success = self.game_item_system.give_item_by_name(item_name)
+                success = self.game_item_system.give_item_by_name(actual_item_name)
                 if success:
-                    logger.info(f"Gave {item_name} with animation!")
+                    # Only commit the progressive counter increment on success
+                    # so retries don't skip tiers
+                    if is_progressive:
+                        self.progressive_counts[item_name] = next_count
+                    logger.info(f"Gave {actual_item_name} with animation!")
                 else:
-                    logger.warning(f"Failed to give {item_name} via item system")
+                    logger.warning(f"Failed to give {actual_item_name} via item system")
                 return success
             except Exception as e:
-                logger.warning(f"Item system error for {item_name}: {e}, falling back to direct write")
-                # Fall through to legacy system
-        
-        # Fallback: Legacy direct memory write system (no animations)
-        logger.debug(f"Using legacy direct memory write for {item_name}")
-        
-        try:
-            if item_name not in ITEM_TABLE:
-                logger.warning(f"Item '{item_name}' not found in ITEM_TABLE")
+                logger.warning(f"Item system error for {actual_item_name}: {e}")
                 return False
-            
-            try:
-                from ALL_ITEM_MEMORY_ADDRESSES import (
-                    get_item_memory_address,
-                    is_progressive_item,
-                    is_trap_item,
-                    is_special_item,
-                )
-            except ImportError:
-                logger.error("Failed to import item memory addresses")
-                return False
-            
-            success = False
-            
-            # Check if it's a consumable counter item
-            if item_name in ["Green Rupee", "Blue Rupee", "Red Rupee", "Silver Rupee", "Gold Rupee"]:
-                success = self._give_rupees_dual(item_name)
-            elif item_name.endswith("Bombs") or item_name == "Bomb":
-                success = self._give_bombs_dual(item_name)
-            elif item_name.endswith("Arrows") or item_name == "Arrow":
-                success = self._give_arrows_dual(item_name)
-            elif "Seed" in item_name and "Slingshot" not in item_name:
-                success = self._give_seeds_dual(item_name)
-            elif "Crystal" in item_name:
-                success = self._give_crystals_dual(item_name)
-            elif "Heart" in item_name and item_name not in [
-                "Heart Potion",
-                "Heart Potion Plus",
-                "Heart Potion Plus Plus",
-                "Heart Medal",
-                "Heart Container",
-                "Heart Piece",
-            ]:
-                success = self._give_hearts(item_name)
-            # Progressive items (handled by sshd-rando patches)
-            elif is_progressive_item(item_name):
-                logger.debug(f"Progressive item '{item_name}' - handled by randomizer")
-                logger.info(f"✅ Accepted progressive: {item_name}")
-                return True
-            # Trap items (don't need memory implementation)
-            elif is_trap_item(item_name):
-                logger.debug(f"Trap item '{item_name}' - handled by archipelago")
-                logger.info(f"✅ Accepted trap: {item_name}")
-                return True
-            # Special items that don't need memory flags
-            elif is_special_item(item_name):
-                logger.debug(f"Special item '{item_name}' - no memory implementation needed")
-                logger.info(f"✅ Accepted special: {item_name}")
-                return True
-            # Try comprehensive item memory mapping
-            else:
-                address = get_item_memory_address(item_name)
-                if address is not None:
-                    byte_offset, bit_position = address
-                    success = self._set_item_flag_dual(byte_offset, bit_position)
-                else:
-                    # Unknown item - log and accept
-                    logger.warning(f"⚠️ Unknown item: {item_name} - no memory address found")
-                    logger.info(f"✅ Accepted unknown item: {item_name}")
-                    return True
-            
-            if success:
-                logger.info(f"Gave item: {item_name}")
-            else:
-                logger.warning(f"Failed to give item: {item_name}")
-            
-            return success
-            
-        except Exception as e:
-            logger.error(f"Error giving item '{item_name}': {e}")
-            import traceback
-            logger.debug(traceback.format_exc())
+        else:
+            logger.error("GameItemSystem not available. Cannot give item.")
             return False
-    
-    def _set_item_flag(self, base_offset: int, byte_offset: int, bit_position: int) -> bool:
-        """Set a single bit flag for a major item."""
-        try:
-            address = base_offset + byte_offset
-            current_byte = self.memory.read_byte(address)
-            if current_byte is None:
-                return False
-            
-            # Set the bit
-            new_byte = current_byte | (1 << bit_position)
-            return self.memory.write_byte(address, new_byte)
-        except Exception as e:
-            logger.debug(f"Error setting flag: {e}")
-            return False
-    
-    def _set_item_flag_dual(self, byte_offset: int, bit_position: int) -> bool:
-        """Set bit flag in both uncommitted and committed memory regions."""
-        ITEMFLAGS_UNCOMMITTED_OFFSET = 0x182E170
-        FILE_MANAGER_OFFSET = 0x5AEAD44
-        FILE_A_POINTER_OFFSET = 0x10
-        ITEMFLAGS_IN_FILE_OFFSET = 0x9E4
-        
-        try:
-            # Write to uncommitted (runtime) - use offset from base
-            address_offset = ITEMFLAGS_UNCOMMITTED_OFFSET + byte_offset
-            byte_val = self.memory.read_byte(address_offset)
-            if byte_val is None:
-                logger.warning(f"Could not read byte at offset 0x{address_offset:X}")
-                return False
-            
-            new_byte = byte_val | (1 << bit_position)
-            if not self.memory.write_byte(address_offset, new_byte):
-                logger.warning(f"Failed to write to offset 0x{address_offset:X}")
-                return False
-            
-            logger.debug(f"Wrote flag to uncommitted at 0x{address_offset:X}: 0x{byte_val:02X} → 0x{new_byte:02X}")
-            
-            # Also write to committed (save file) via File Manager structure (direct offset, not pointer chain)
-            try:
-                # File Manager is a structure at base + 0x5AEAD44
-                # File A is embedded at +0x10, Itemflags at +0x9E4
-                itemflags_committed_offset = FILE_MANAGER_OFFSET + FILE_A_POINTER_OFFSET + ITEMFLAGS_IN_FILE_OFFSET + byte_offset
-                logger.info(f"[FlagsDebug] Writing directly to committed offset: 0x{itemflags_committed_offset:X}")
-                
-                # Read current byte, set bit, write back
-                committed_byte = self.memory.read_byte(itemflags_committed_offset)
-                if committed_byte is not None:
-                    new_committed = committed_byte | (1 << bit_position)
-                    if self.memory.write_byte(itemflags_committed_offset, new_committed):
-                        logger.info(f"✅ Wrote flag to committed at offset 0x{itemflags_committed_offset:X}")
-            except Exception as e:
-                logger.debug(f"Could not write to committed: {e}")
-            
-            return True
-        except Exception as e:
-            logger.warning(f"Error in flag write: {e}")
-            return False
-    
-    def _give_rupees_dual(self, item_name: str) -> bool:
-        """Add rupees to both uncommitted and committed memory."""
-        rupee_values = {
-            "Green Rupee": 1,
-            "Blue Rupee": 5,
-            "Red Rupee": 20,
-            "Silver Rupee": 100,
-            "Gold Rupee": 300
-        }
-        amount = rupee_values.get(item_name, 0)
-        if amount == 0:
-            return False
-        
-        OFFSET_UNCOMMITTED = 0x182E170 + 0x70 + 0xA
-        FILE_MANAGER_OFFSET = 0x5AEAD44
-        FILE_A_POINTER_OFFSET = 0x10
-        ITEMFLAGS_IN_FILE_OFFSET = 0x9E4
-        
-        try:
-            # Write to uncommitted
-            data = self.memory.read_bytes(OFFSET_UNCOMMITTED, 3)
-            if not data:
-                logger.warning(f"Could not read rupees at offset 0x{OFFSET_UNCOMMITTED:X}")
-                return False
-            
-            current = int.from_bytes(data, 'little') & 0xFFFFF
-            new_value = min(current + amount, 9999)
-            logger.info(f"Rupees: {current} + {amount} = {new_value}")
-            
-            original_full = int.from_bytes(data, 'little')
-            new_full = (original_full & 0xFFF00000) | new_value
-            new_bytes = new_full.to_bytes(3, 'little')
-            
-            for i, byte_val in enumerate(new_bytes):
-                if not self.memory.write_byte(OFFSET_UNCOMMITTED + i, byte_val):
-                    logger.warning(f"Failed to write rupee byte {i}")
-                    return False
-            
-            # Write to committed via File Manager structure (direct offset, not pointer chain)
-            try:
-                # File Manager is a structure at base + 0x5AEAD44
-                # File A is embedded at +0x10, Itemflags at +0x9E4, Rupees at +0x70+0xA
-                rupees_committed_offset = FILE_MANAGER_OFFSET + FILE_A_POINTER_OFFSET + ITEMFLAGS_IN_FILE_OFFSET + 0x70 + 0xA
-                logger.info(f"[RupeesDebug] Writing directly to committed offset: 0x{rupees_committed_offset:X}")
-                
-                for i, byte_val in enumerate(new_bytes):
-                    if not self.memory.write_byte(rupees_committed_offset + i, byte_val):
-                        logger.warning(f"Failed to write committed rupee byte {i}")
-                        break
-                else:
-                    logger.info(f"✅ Wrote rupees to committed at offset 0x{rupees_committed_offset:X}")
-            except Exception as e:
-                logger.debug(f"Could not write rupees to committed: {e}")
-            
-            return True
-        except Exception as e:
-            logger.error(f"Error giving rupees: {e}")
-            return False
-    
-    def _give_bombs_dual(self, item_name: str) -> bool:
-        """Add bombs to memory."""
-        bomb_amounts = {"Bomb": 1, "5 Bombs": 5, "10 Bombs": 10}
-        amount = bomb_amounts.get(item_name, 5)
-        
-        OFFSET_UNCOMMITTED = 0x182E170 + 0x70 + 0xE
-        try:
-            data = self.memory.read_bytes(OFFSET_UNCOMMITTED, 2)
-            if not data:
-                return False
-            
-            value = int.from_bytes(data, 'little')
-            current = (value >> 7) & 0x7F
-            new_count = min(current + amount, 99)
-            
-            value = (value & ~(0x7F << 7)) | (new_count << 7)
-            new_bytes = value.to_bytes(2, 'little')
-            
-            for i, byte_val in enumerate(new_bytes):
-                if not self.memory.write_byte(OFFSET_UNCOMMITTED + i, byte_val):
-                    return False
-            return True
-        except:
-            return False
-    
-    def _give_arrows_dual(self, item_name: str) -> bool:
-        """Add arrows to memory."""
-        arrow_amounts = {"Arrow": 1, "5 Arrows": 5, "10 Arrows": 10}
-        amount = arrow_amounts.get(item_name, 10)
-        
-        OFFSET_UNCOMMITTED = 0x182E170 + 0x70 + 0xE
-        try:
-            data = self.memory.read_bytes(OFFSET_UNCOMMITTED, 2)
-            if not data:
-                return False
-            
-            value = int.from_bytes(data, 'little')
-            current = value & 0x7F
-            new_count = min(current + amount, 99)
-            
-            value = (value & ~0x7F) | new_count
-            new_bytes = value.to_bytes(2, 'little')
-            
-            for i, byte_val in enumerate(new_bytes):
-                if not self.memory.write_byte(OFFSET_UNCOMMITTED + i, byte_val):
-                    return False
-            return True
-        except:
-            return False
-    
-    def _give_seeds_dual(self, item_name: str) -> bool:
-        """Add Deku seeds to memory."""
-        seed_amounts = {"Deku Seed": 1, "5 Deku Seeds": 5, "10 Deku Seeds": 10}
-        amount = seed_amounts.get(item_name, 5)
-        
-        OFFSET_UNCOMMITTED = 0x182E170 + 0x70 + 0xC
-        try:
-            data = self.memory.read_bytes(OFFSET_UNCOMMITTED, 2)
-            if not data:
-                return False
-            
-            value = int.from_bytes(data, 'little')
-            current = (value >> 7) & 0x7F
-            new_count = min(current + amount, 99)
-            
-            value = (value & ~(0x7F << 7)) | (new_count << 7)
-            new_bytes = value.to_bytes(2, 'little')
-            
-            for i, byte_val in enumerate(new_bytes):
-                if not self.memory.write_byte(OFFSET_UNCOMMITTED + i, byte_val):
-                    return False
-            return True
-        except:
-            return False
-    
-    def _give_crystals_dual(self, item_name: str) -> bool:
-        """Add gratitude crystals to memory."""
-        crystal_amounts = {"Gratitude Crystal": 1, "5 Gratitude Crystals": 5}
-        amount = crystal_amounts.get(item_name, 1)
-        
-        OFFSET_UNCOMMITTED = 0x182E170 + 0x60 + 0xC
-        try:
-            data = self.memory.read_bytes(OFFSET_UNCOMMITTED, 2)
-            if not data:
-                return False
-            
-            value = int.from_bytes(data, 'little')
-            current = (value >> 3) & 0x7F
-            new_count = min(current + amount, 80)
-            
-            value = (value & ~(0x7F << 3)) | (new_count << 3)
-            new_bytes = value.to_bytes(2, 'little')
-            
-            for i, byte_val in enumerate(new_bytes):
-                if not self.memory.write_byte(OFFSET_UNCOMMITTED + i, byte_val):
-                    return False
-            return True
-        except:
-            return False
-    
-    def _give_hearts(self, item_name: str) -> bool:
-        """Restore hearts (temporary health boost)."""
-        logger.debug(f"Heart item '{item_name}' received")
-        return True
-    
-    def get_progressive_item_id(self, progressive_name: str, count: int) -> Optional[int]:
-        """
-        Convert progressive item name + count to actual item ID.
-        
-        For example: "Progressive Sword" with count 1 = Goddess Sword
-                     "Progressive Sword" with count 2 = Goddess Longsword
-                     etc.
-        """
-        # Progressive item mappings (item IDs from sshd-rando)
-        progressive_maps = {
-            "Progressive Sword": [2773023, 2773031, 2773032, 2773033, 2773034],  # Practice -> Goddess -> Longsword -> White -> Master
-            "Progressive Bow": [2773050, 2773120],  # Wooden Bow -> Iron Bow
-            "Progressive Slingshot": [2773055, 2773285],  # Slingshot -> Scattershot
-            "Progressive Beetle": [2773056, 2773295, 2773296],  # Beetle -> Hook Beetle -> Quick Beetle
-            "Progressive Mitts": [2773058, 2773325],  # Digging Mitts -> Mogma Mitts
-            "Progressive Bug Net": [2773071, 2773140],  # Bug Net -> Big Bug Net
-            "Progressive Wallet": [2773082, 2773672, 2773673, 2773674],  # Medium -> Big -> Giant -> Tycoon
-            "Progressive Pouch": [2773084, 2773710, 2773711, 2773712, 2773713],  # 5 levels of pouch
-            "Progressive Bomb Bag": [2773051, 2773121, 2773122],  # Regular -> Big -> Bigger
-        }
-        
-        if progressive_name not in progressive_maps:
-            return None
-        
-        item_list = progressive_maps[progressive_name]
-        
-        # Return the item for this level (1-indexed)
-        if 1 <= count <= len(item_list):
-            return item_list[count - 1]
-        
-        # Already at max level, give last level again
-        return item_list[-1] if item_list else None
-    
-    def build_item_to_location_map(self) -> dict[int, int]:
-        """
-        Build a mapping of item code -> location code from slot_data.
-        
-        This mapping comes from the world generation and tells us which location
-        each item code should check when it is given to the player.
-        
-        Returns:
-            Dict[item_code: int] = location_code: int
-        """
-        item_to_location = {}
-        
-        # Check if we have slot_data with the location_to_item_map
-        if not hasattr(self, 'slot_data') or not self.slot_data:
-            logger.debug("build_item_to_location_map: slot_data not available yet")
-            return item_to_location
-        
-        # Get the location_to_item mapping from slot_data
-        location_to_item_map = self.slot_data.get("location_to_item_map", {})
-        if not location_to_item_map:
-            logger.debug("build_item_to_location_map: location_to_item_map not in slot_data")
-            return item_to_location
-        
-        # Reverse the mapping: location_code -> item_code becomes item_code -> location_code
-        # location_to_item_map is {location_code: item_code}
-        # We need {item_code: location_code}
-        for location_code, item_code in location_to_item_map.items():
-            item_to_location[item_code] = location_code
-        
-        logger.info(f"✓ Built item-to-location mapping from slot_data: {len(item_to_location)} items")
-        return item_to_location
-    
+
     async def ryujinx_connection_task(self):
         """Background task to maintain connection to Ryujinx."""
         while not self.exit_event.is_set():
@@ -1089,22 +965,13 @@ class SSHDContext(CommonContext):
                 if not self.memory.connected:
                     if self.memory.connect():
                         # Connection successful, find base address
-                        try:
-                            result = await self.memory.find_base_address()
-                            if result:
-                                # Base address found - log it to the user
-                                logger.info(f"Found SSHD base address: 0x{self.memory.base_address:X}")
-                                # Try to build item mapping now if server is connected
-                                # Otherwise it will be built lazily when items are received
-                                if hasattr(self, 'slot') and self.slot and hasattr(self, 'worlds') and self.worlds:
-                                    self.item_to_location = self.build_item_to_location_map()
-                                # Don't set connected = False, keep scanning for updates
-                            else:
-                                logger.error("Failed to find SSHD in memory. Is the game running?")
-                                self.memory.connected = False
-                        except Exception as e:
-                            logger.error(f"Error finding base address: {e}")
+                        if not await self.memory.find_base_address():
+                            logger.error("Failed to find SSHD in memory. Is the game running?")
                             self.memory.connected = False
+                        else:
+                            # Set connection time to prevent false death detection on startup
+                            self.connection_time = time.time()
+                            logger.debug(f"Connection time set to {self.connection_time}")
                     
                     # Wait before retrying
                     await asyncio.sleep(5)
@@ -1119,206 +986,269 @@ class SSHDContext(CommonContext):
                 self.memory.connected = False
                 await asyncio.sleep(5)
     
-    async def scan_custom_flags(self):
-        """
-        Scan memory for custom flag changes to detect checked locations.
-        
-        sshd-rando assigns custom flags (10-bit encoded) to locations:
-        - Bit 9: 0=scene flags, 1=dungeon flags
-        - Bits 8-7: Index (0-3) within that flag space
-        - Bits 6-0: Flag bit (0-127) within the 16-byte index
-        
-        Each index is 16 bytes = 128 bits
-        Total: 512 scene + 512 dungeon = 1024 custom flags
-        """
-        if not self.memory.connected or not self.memory.base_address:
-            return
-        
-        # Only scan if we have the mapping
-        if not self.custom_flag_to_location:
-            return
-        
-        try:
-            # Read scene flag space (16 bytes = 128 bits)
-            scene_flag_bytes = self.memory.read_bytes(OFFSET_SCENE_FLAGS_STATIC, 16)
-            
-            # Read dungeon flag space (16 bytes = 128 bits)
-            dungeon_flag_bytes = self.memory.read_bytes(OFFSET_DUNGEON_FLAGS_STATIC, 16)
-            
-            if scene_flag_bytes is None or dungeon_flag_bytes is None:
-                return
-            
-            # Initialize previous state on first scan (prevents detecting existing flags as "new")
-            # We only want to detect flags that change from 0→1 after we start monitoring
-            first_scan = not hasattr(self, '_custom_flags_initialized')
-            if first_scan:
-                logger.debug("First custom flag scan - initializing baseline state")
-                self._custom_flags_initialized = True
-            
-            newly_checked_locations = []
-            
-            # Check each custom flag we're tracking
-            for custom_flag_id, location_code in self.custom_flag_to_location.items():
-                # Decode the custom flag ID
-                flag_space_trigger = (custom_flag_id >> 9) & 1  # Bit 9
-                index = (custom_flag_id >> 7) & 3  # Bits 8-7
-                flag_bit = custom_flag_id & 0x7F  # Bits 6-0
-                
-                # Select the appropriate flag bytes
-                flag_bytes = dungeon_flag_bytes if flag_space_trigger else scene_flag_bytes
-                
-                # Calculate byte and bit position
-                byte_index = flag_bit // 8
-                bit_index = flag_bit % 8
-                
-                # Check if flag is set
-                is_set = (flag_bytes[byte_index] >> bit_index) & 1
-                
-                # On first scan, just record current state without checking locations
-                if first_scan:
-                    self.previous_custom_flags[custom_flag_id] = is_set
-                    continue
-                
-                # Compare with previous state
-                prev_state = self.previous_custom_flags.get(custom_flag_id, 0)
-                
-                if is_set and not prev_state:
-                    # Flag just changed from 0→1, location was checked!
-                    if location_code not in self.checked_locations:
-                        self.checked_locations.add(location_code)
-                        newly_checked_locations.append(location_code)
-                        logger.info(f"Location checked in-game: {location_code} (flag {custom_flag_id})")
-                
-                # Update previous state
-                self.previous_custom_flags[custom_flag_id] = is_set
-            
-            # Send newly checked locations to server
-            if newly_checked_locations:
-                await self.send_msgs([{
-                    "cmd": "LocationChecks",
-                    "locations": newly_checked_locations
-                }])
-                logger.info(f"Sent {len(newly_checked_locations)} location checks to server")
-                
-                # Check if "Defeat Demise" location (2773238) was just checked - this means victory!
-                DEFEAT_DEMISE_LOCATION = 2773238
-                if DEFEAT_DEMISE_LOCATION in newly_checked_locations:
-                    logger.info("=== VICTORY! Demise defeated - sending goal completion to server ===")
-                    await self.send_msgs([{
-                        "cmd": "StatusUpdate",
-                        "status": ClientStatus.CLIENT_GOAL
-                    }])
-                    # Server will automatically release all remaining items if auto-release is enabled
-                
-        except Exception as e:
-            logger.error(f"Error scanning custom flags: {e}")
-    
     async def update_game_state(self):
         """
         Read game state from memory and check for location completions.
         
         This is called frequently to monitor game progress.
         """
-        # Log first call
-        if not hasattr(self, '_update_logged'):
-            logger.info(f"[GameState] update_game_state() is being called, LOCATION_FLAG_MAP has {len(LOCATION_FLAG_MAP) if LOCATION_FLAG_MAP else 0} entries")
-            self._update_logged = True
-            logger.info(f"[DEBUG] Available attributes: {[a for a in dir(self) if not a.startswith('_')][:20]}")
-
-        
-        # Log item queue status periodically
-        if not hasattr(self, '_queue_log_counter'):
-            self._queue_log_counter = 0
-        self._queue_log_counter += 1
-        if self._queue_log_counter >= 300:  # Log every ~5 seconds (60 calls/sec * 5)
-            self._queue_log_counter = 0
-            logger.debug(f"[DEBUG] Queue status: {len(self.item_queue)} items pending, {len(self.item_to_location)} items in mapping")
-        
         if not self.memory.connected or not self.memory.base_address:
-            # Log connection status periodically
-            if not hasattr(self, '_last_disconnect_log'):
-                self._last_disconnect_log = 0
-            
-            if self._last_disconnect_log == 0:
-                logger.warning("Memory not connected to game - waiting for Ryujinx connection")
-                self._last_disconnect_log = 300  # Log every 5 seconds (300 frames at 60fps)
-            else:
-                self._last_disconnect_log -= 1
             return
-        
-        # Reset disconnect counter when connected
-        if hasattr(self, '_last_disconnect_log'):
-            if self._last_disconnect_log != 300:
-                logger.info(f"Memory connected! Base address: {hex(self.memory.base_address)}")
-            self._last_disconnect_log = 300
-        
-        # Initialize location checking if not already done
-        if LOCATION_FLAG_MAP and not hasattr(self, 'location_check_counter'):
-            logger.info(f"Location checking enabled with {len(LOCATION_FLAG_MAP)} locations")
-            self.location_check_counter = 0
         
         try:
             # Verify game is loaded by reading stage name
-            # This is more reliable than checking game state flags
             stage_name = self.memory.read_string(OFFSET_CURRENT_STAGE + OFFSET_STAGE_NAME, 16)
             if not stage_name or len(stage_name) == 0:
                 # Game not loaded yet (title screen, loading, etc.)
-                if not hasattr(self, '_no_stage_logged'):
-                    logger.debug("No stage loaded yet")
-                    self._no_stage_logged = True
                 return
-            else:
-                # Clear the flag when stage is loaded
-                if hasattr(self, '_no_stage_logged'):
-                    logger.debug(f"Stage loaded: {stage_name}")
-                    delattr(self, '_no_stage_logged')
             
             # Update current stage
             if stage_name != self.current_stage:
                 logger.info(f"Entered stage: {stage_name}")
                 self.current_stage = stage_name
             
-            # Scan memory for checked locations (custom flags)
-            await self.scan_custom_flags()
-            
             # Give queued items to player
             if self.item_queue:
                 item_data = self.item_queue[0]
-                logger.debug(f"Processing item from queue: {item_data['name']} (ID: {item_data['id']})")
-                
                 if self.give_item_to_player(item_data["name"], item_data["id"]):
-                    # Successfully gave SSHD item to player's inventory
+                    # Successfully gave item
+                    player_name = item_data.get("player_name", "another player")
+                    location_name = item_data.get("location", "unknown location")
+                    is_own_item = (item_data.get("location_player") == self.slot)
                     
-                    # NOTE: We do NOT check locations here!
-                    # Location checking happens when the player picks up items IN-GAME
-                    # via scan_custom_flags() detecting custom flag changes.
-                    # 
-                    # This queue is for items received FROM THE SERVER (cross-world items)
-                    # which should only be given to the player's inventory, not check locations.
+                    if not is_own_item:
+                        # Received item from another player
+                        logger.info(f"Received {item_data['name']} from {player_name} ({location_name})")
+                    else:
+                        # Received own item
+                        logger.info(f"Received {item_data['name']} ({location_name})")
                     
+                    # Remove from queue and persist delivery count
                     self.item_queue.pop(0)
-                else:
-                    # Failed to give item, will retry next frame
-                    pass
+                    self.delivered_item_count += 1
+                    self.save_progress()
             
             # Check for death (for death link)
-            current_health = self.memory.read_short(OFFSET_PLAYER + OFFSET_CURRENT_HEALTH)
+            current_health = self.memory.read_short(OFFSET_CURRENT_HEALTH)
             if current_health is not None:
-                # Player just died if health went to 0 (from any positive value OR if we had None before)
-                if current_health == 0 and (self.last_hearts is None or self.last_hearts > 0):
-                    # Player just died
-                    if "DeathLink" in self.tags:
-                        await self.send_death(f"{self.auth} died in {self.current_stage or 'Skyloft'}")
+                # Skip death detection for 10 seconds after connection to avoid false positives
+                time_since_connect = time.time() - self.connection_time
+                if time_since_connect > 10.0:
+                    # Player just died if health went to 0 (from any positive value OR if we had None before)
+                    if current_health == 0 and (self.last_hearts is None or self.last_hearts > 0):
+                        # Player just died - but skip sending if we killed them via death link
+                        if self.killed_by_deathlink:
+                            logger.debug("Death detected, but caused by receiving death link - not sending")
+                            self.killed_by_deathlink = False  # Clear flag
+                        elif "DeathLink" in self.tags:
+                            stage_name = STAGE_NAMES.get(self.current_stage, self.current_stage or "Skyloft")
+                            await self.send_death(f"{self.auth} died in {stage_name}")
                 self.last_hearts = current_health
             
-            # Location checking is now handled by scan_custom_flags()
-            # which detects custom flag changes when items are picked up in-game.
-            # No additional location checking needed here.
+            # Check for completed locations using custom flags or LocationFlags.py data
+            if self.custom_flag_to_location:
+                # Use custom flag system (preferred for SSHD)
+                await self.check_custom_flags()
+            elif LOCATION_FLAG_MAP:
+                # Fallback to LocationFlags.py - but only if static memory is accessible
+                # Test if we can read the first static flag address to avoid error spam
+                test_read = self.memory.read_byte(OFFSET_SCENE_FLAGS_STATIC)
+                if test_read is not None:
+                    # NOTE: FLAG_SCENE should work (uses SSHD addresses), but FLAG_STORY has Wii addresses
+                    await self.check_all_locations()
             
+            # Send any newly checked locations to server
+            new_locations = self.checked_locations.difference(self.missing_locations)
+            if new_locations:
+                await self.send_msgs([{
+                    "cmd": "LocationChecks",
+                    "locations": list(new_locations)
+                }])
+                
+                # Check if "Defeat Demise" location (2773238) was just checked - this means victory!
+                DEFEAT_DEMISE_LOCATION = 2773238
+                if DEFEAT_DEMISE_LOCATION in new_locations:
+                    logger.info("=== 🎉 VICTORY! Demise defeated - sending goal completion to server ===")
+                    await self.send_msgs([{
+                        "cmd": "StatusUpdate",
+                        "status": ClientStatus.CLIENT_GOAL
+                    }])
+                    # Server will automatically release all remaining items if auto-release is enabled
+                    
         except Exception as e:
             logger.error(f"Error updating game state: {e}")
     
+    async def check_custom_flags(self):
+        """Check custom flags for location completion (SSHD-specific)."""
+        if not self.memory.connected or not self.memory.base_address:
+            return
+        
+        # Custom flags use the game's sceneflag/dungeonflag system
+        # Each flag is a single bit that gets set when a location is checked
+        # The mapping from flag ID to location code is provided in slot_data
+        
+        # Get FILE_MGR pointer to access sceneflags/dungeonflags
+        file_mgr_ptr = self.memory.read_pointer(OFFSET_FILE_MANAGER)
+        if not file_mgr_ptr:
+            return
+        
+        # FILE_MGR.FA is at offset 0x10 from FILE_MGR base
+        # sceneflags are at FILE_MGR.FA + 0x0
+        # dungeonflags are at FILE_MGR.FA + some offset (need to determine exact)
+        # For now, use the OFFSET_SCENE_FLAGS_STATIC which points to static sceneflags
+        
+        for flag_id, location_code in self.custom_flag_to_location.items():
+            # Skip if already checked
+            if location_code in self.checked_locations:
+                continue
+            
+            # Unpack the custom flag from item.rs unpacking logic
+            # Custom flags in sshd-rando use sceneindex and flag number
+            # The flag_id itself encodes both: upper bits = scene, lower bits = flag
+            # Based on item.rs: flag_space_trigger determines if it's sceneflag (0) or dungeonflag (1)
+            
+            # For custom flags, the encoding is:
+            # - Bits 0-6 (0x7F): flag number within the scene
+            # - Bits 7-8: scene index (transformed to one of 6, 13, 16, 19)
+            # - Bit 9: flag_space_trigger (0=sceneflag, 1=dungeonflag)
+            
+            flag_num = flag_id & 0x7F  # Lower 7 bits
+            scene_idx_raw = (flag_id >> 7) & 0x03  # Bits 7-8
+            flag_space_trigger = (flag_id >> 9) & 0x01  # Bit 9
+            
+            # Transform scene index like in item.rs
+            scene_idx_map = {0: 6, 1: 13, 2: 16, 3: 19}
+            sceneindex = scene_idx_map.get(scene_idx_raw, 6)
+            
+            # Calculate bit position within flag storage
+            # Flags are stored as array[sceneindex][upper_flag] with bits in lower_flag
+            upper_flag = (flag_num & 0xF0) >> 4  # Nibble position (0-15)
+            lower_flag = flag_num & 0x0F  # Bit position within nibble (0-15)
+            
+            try:
+                # Read the appropriate flag byte (need to add base_address!)
+                if flag_space_trigger == 0:
+                    # Scene flag - stored at base + OFFSET_SCENE_FLAGS_STATIC + (sceneindex * 16) + upper_flag
+                    flag_addr = self.memory.base_address + OFFSET_SCENE_FLAGS_STATIC + (sceneindex * 16) + upper_flag
+                    current_byte = self.memory.read_byte(flag_addr)
+                else:
+                    # Dungeon flag - stored at base + OFFSET_DUNGEON_FLAGS_STATIC + (sceneindex * 16) + upper_flag  
+                    flag_addr = self.memory.base_address + OFFSET_DUNGEON_FLAGS_STATIC + (sceneindex * 16) + upper_flag
+                    current_byte = self.memory.read_byte(flag_addr)
+                
+                if current_byte is not None:
+                    # Check if the specific bit is set
+                    flag_state = (current_byte >> lower_flag) & 0x1
+                    previous_state = self.previous_custom_flags.get(flag_id, 0)
+                    
+                    if flag_state == 1 and previous_state == 0:
+                        # Flag was just set - location completed!
+                        self.checked_locations.add(location_code)
+                        # Get location name for logging
+                        location_name = self.location_names.lookup_in_slot(location_code, self.slot)
+                        logger.info(f"Checked {location_name}")
+                    
+                    self.previous_custom_flags[flag_id] = flag_state
+                    
+            except Exception as e:
+                logger.debug(f"Error checking custom flag {flag_id}: {e}")
+    
     async def check_all_locations(self):
+        """Check all locations using LocationFlags.py data (Wii addresses - may not work on Switch)."""
+        if not self.memory.connected or not self.memory.base_address:
+            return
+        
+        for location_name, (flag_type, flag_bit, flag_value, scene_or_addr) in LOCATION_FLAG_MAP.items():
+            # Get proper location ID from LOCATION_TABLE
+            if location_name in LOCATION_TABLE:
+                location_id = LOCATION_TABLE[location_name].code
+            else:
+                # Skip locations not in table
+                continue
+            
+            # Skip if already checked
+            if location_id in self.checked_locations:
+                continue
+            
+            try:
+                is_checked = False
+                
+                if flag_type == FLAG_STORY:
+                    # Story flags use static addresses (base-relative)
+                    story_addr = scene_or_addr
+                    if isinstance(story_addr, int):
+                        byte_val = self.memory.read_byte(story_addr)
+                        if byte_val is not None:
+                            is_checked = bool(byte_val & (1 << flag_bit))
+                
+                elif flag_type == FLAG_SCENE:
+                    # Scene flags use scene name and are stored in static scene flag array
+                    scene_name = scene_or_addr
+                    if scene_name in SCENE_FLAG_ADDRESSES:
+                        # SCENE_FLAG_ADDRESSES contains base-relative offsets, not absolute addresses
+                        scene_base = SCENE_FLAG_ADDRESSES[scene_name]
+                        flag_addr = scene_base + flag_bit
+                        byte_val = self.memory.read_byte(flag_addr)
+                        if byte_val is not None:
+                            is_checked = bool(byte_val & flag_value)
+                
+                if is_checked:
+                    self.checked_locations.add(location_id)
+                    location_name_display = location_name[:50]  # Truncate long names
+                    logger.info(f"✅ Location checked: {location_name_display}")
+                    
+            except Exception as e:
+                logger.debug(f"Error checking location {location_name}: {e}")
+    
+    def build_item_to_location_map(self) -> Dict[int, int]:
+        """
+        Build a mapping from item codes to location codes.
+        
+        This is built from slot_data which contains the randomized item placements.
+        Each location has an item placed at it, creating the item->location relationship.
+        
+        Returns:
+            Dictionary mapping item code -> location code
+        """
+        item_to_loc = {}
+        
+        # Check if slot_data has location placements
+        if not self.slot_data:
+            logger.warning("No slot_data available yet - cannot build item_to_location map")
+            return item_to_loc
+        
+        # Try to build from location_to_item mapping in patch data
+        if hasattr(self, 'location_to_item') and self.location_to_item:
+            for loc_name, item_info in self.location_to_item.items():
+                # Get location code from LOCATION_TABLE
+                if loc_name in LOCATION_TABLE:
+                    location_code = LOCATION_TABLE[loc_name].code
+                    item_code = item_info.get('id') or item_info.get('code')
+                    if location_code and item_code:
+                        item_to_loc[item_code] = location_code
+            
+            if item_to_loc:
+                logger.info(f"Built item_to_location map with {len(item_to_loc)} entries from patch data")
+                return item_to_loc
+        
+        # Alternative: Build from slot_data if it has item placements
+        item_placements = self.slot_data.get('item_placements', {})
+        if item_placements:
+            for loc_code_str, item_code in item_placements.items():
+                try:
+                    loc_code = int(loc_code_str) if isinstance(loc_code_str, str) else loc_code_str
+                    item_to_loc[item_code] = loc_code
+                except (ValueError, TypeError):
+                    continue
+            
+            if item_to_loc:
+                logger.info(f"Built item_to_location map with {len(item_to_loc)} entries from slot_data")
+                return item_to_loc
+        
+        logger.debug("No item placement data found - item_to_location map is empty")
+        return item_to_loc
+
+    def check_locations(self):
         """
         Check for completed locations.
         
@@ -1333,28 +1263,29 @@ class SSHDContext(CommonContext):
         # No additional memory-based checking needed
         pass
     
-    def mark_location_checked(self, location_name: str):
-        """Mark a location as checked (legacy helper method)."""
-        if location_name in LOCATION_TABLE:
-            location_id = LOCATION_TABLE[location_name].code
-        else:
-            location_id = 2773000 + (hash(location_name) % 900)
-        
-        if location_id not in self.checked_locations:
-            self.checked_locations.add(location_id)
-            logger.info(f"Marked location checked: {location_name} (ID: {location_id})")
-    
-    async def on_deathlink(self, data: dict):
+    def on_deathlink(self, data: dict):
         """
         Handle death link - kill the player when someone else dies.
         """
+        self.last_death_link = max(data.get("time", 0.0), self.last_death_link)
+
         if not self.memory.connected or not self.memory.base_address:
+            logger.warning("DeathLink: Cannot kill player - not connected to game")
             return
-        
-        logger.info(f"Death link received from {data.get('source', 'Unknown')}: {data.get('cause', 'died')}")
-        
-        # Set player hearts to 0 to trigger death
-        self.memory.write_short(OFFSET_PLAYER + OFFSET_CURRENT_HEALTH, 0)
+
+        source = data.get('source', 'Unknown')
+        cause = data.get('cause', '') or f"{source} died"
+        logger.info(f"DeathLink: {cause}")
+
+        # Write 0 to current health to kill the player
+        health_offset = OFFSET_CURRENT_HEALTH
+        success = self.memory.write_short(health_offset, 0)
+        if success:
+            logger.info(f"DeathLink: Set health to 0 at offset 0x{health_offset:X}")
+            # Set flag to prevent sending death link for this death
+            self.killed_by_deathlink = True
+        else:
+            logger.error(f"DeathLink: Failed to write health at offset 0x{health_offset:X}")
     
     async def send_death(self, death_text: str = ""):
         """
@@ -1362,13 +1293,19 @@ class SSHDContext(CommonContext):
         """
         if "DeathLink" not in self.tags:
             return
-        
-        await self.send_msgs([{
-            "cmd": "Deathlink",
-            "time": time.time(),
-            "source": self.auth,
-            "cause": death_text or f"{self.auth} died"
-        }])
+
+        if self.server and self.server.socket:
+            self.last_death_link = time.time()
+            logger.info("DeathLink: Sending death to your friends...")
+            await self.send_msgs([{
+                "cmd": "Bounce",
+                "tags": ["DeathLink"],
+                "data": {
+                    "time": self.last_death_link,
+                    "source": self.auth,
+                    "cause": death_text or f"{self.auth} died"
+                }
+            }])
     
     def run_gui(self):
         """Run the GUI for the client."""

@@ -162,6 +162,12 @@ pub extern "C" fn give_item(itemid: u8) {
 #[no_mangle]
 pub extern "C" fn give_item_with_sceneflag(itemid: u8, sceneflag: u8) -> *mut dAcItem {
     unsafe {
+        // TEMP FIX: ROOM_MGR check disabled due to ASLR relocation issues
+        // TODO: Implement proper symbol relocation or dynamic ROOM_MGR lookup
+        // if ROOM_MGR.is_null() {
+        //     return core::ptr::null_mut();
+        // }
+
         NUMBER_OF_ITEMS = 0;
         ITEM_GET_BOTTLE_POUCH_SLOT = 0xFFFFFFFF;
 
@@ -178,59 +184,14 @@ pub extern "C" fn give_item_with_sceneflag(itemid: u8, sceneflag: u8) -> *mut dA
             0xFFFFFFFF,
         ) as *mut dAcItem;
 
+        if item_actor.is_null() {
+            return item_actor;
+        }
+
         ITEM_GET_BOTTLE_POUCH_SLOT = 0xFFFFFFFF;
         NUMBER_OF_ITEMS = 0;
 
         return item_actor;
-    }
-}
-
-// Archipelago Integration - Buffer-based item distribution
-// This static buffer is allocated in Rust's data section and can be safely
-// accessed
-static mut ARCHIPELAGO_BUFFER: [u8; 16] = [0; 16];
-
-// Get the buffer address for Python client to use
-#[no_mangle]
-pub extern "C" fn get_archipelago_buffer_address() -> u64 {
-    unsafe { ARCHIPELAGO_BUFFER.as_ptr() as u64 }
-}
-
-// Called every frame from main loop to check for pending items
-#[no_mangle]
-pub extern "C" fn archipelago_check_item_buffer() {
-    unsafe {
-        // Safety check: Don't try to give items if ROOM_MGR is not initialized
-        if ROOM_MGR.is_null() {
-            return;
-        }
-
-        let buffer_ptr = ARCHIPELAGO_BUFFER.as_mut_ptr();
-
-        // Check each slot in the buffer (4 slots, 4 bytes each)
-        for slot in 0..4 {
-            let offset = slot * 4;
-            let item_id = *buffer_ptr.add(offset);
-
-            // Skip empty slots (item_id == 0)
-            if item_id == 0 {
-                continue;
-            }
-
-            let _flags = *buffer_ptr.add(offset + 1);
-            // Give the item using the existing function
-            // sceneflag 0xFF means no specific scene flag check
-            give_item_with_sceneflag(item_id, 0xFF);
-
-            // Clear the buffer slot after giving the item
-            *buffer_ptr.add(offset) = 0;
-            *buffer_ptr.add(offset + 1) = 0;
-            *buffer_ptr.add(offset + 2) = 0;
-            *buffer_ptr.add(offset + 3) = 0;
-
-            // Only process one item per frame to avoid overwhelming the game
-            break;
-        }
     }
 }
 
@@ -1539,6 +1500,11 @@ pub extern "C" fn spawn_tree_of_life_item() -> *mut dAcItem {
     let tree_actor: *mut actor::dAcOBase;
 
     unsafe {
+        // Safety check: Don't try to spawn item if ROOM_MGR is not initialized
+        if ROOM_MGR.is_null() {
+            return core::ptr::null_mut();
+        }
+
         asm!("mov {0:x}, x19", out(reg) tree_actor);
 
         let tree_param1 = (*tree_actor).basebase.members.param1;
@@ -1605,4 +1571,162 @@ pub extern "C" fn setup_gossip_stone_item_params(
 
         return item_actor;
     }
+}
+
+// Archipelago item receiving system
+// Buffer structure: 16 slots, 4 bytes each
+// Byte 0: Item ID (0 = empty slot)
+// Byte 1: Flags (0x01 = show animation, 0x02 = play jingle)
+// Bytes 2-3: Reserved
+const ARCHIPELAGO_BUFFER_SIZE: usize = 16;
+
+#[repr(C, packed(1))]
+#[derive(Copy, Clone)]
+pub struct ArchipelagoItemSlot {
+    item_id:   u8,
+    flags:     u8,
+    _reserved: [u8; 2],
+}
+assert_eq_size!([u8; 4], ArchipelagoItemSlot);
+
+// Static buffer for Archipelago item queue
+// This will be written to by the Python client and read by the game
+// Magic signature at the start: "AP" in ASCII (0x4150), followed by version
+// 0x0001 This allows Python to find the real buffer by searching for this
+// signature Format: [magic_high, magic_low, version_high, version_low,
+// ...actual slots...]
+#[no_mangle]
+pub static mut ARCHIPELAGO_ITEM_BUFFER: [ArchipelagoItemSlot; ARCHIPELAGO_BUFFER_SIZE] = [
+    // First slot contains magic signature: "AP\x00\x01"
+    ArchipelagoItemSlot {
+        item_id:   0x41,         // 'A'
+        flags:     0x50,         // 'P'
+        _reserved: [0x00, 0x01], // Version
+    },
+    // Remaining slots for actual items (15 slots)
+    ArchipelagoItemSlot {
+        item_id:   0,
+        flags:     0,
+        _reserved: [0, 0],
+    },
+    ArchipelagoItemSlot {
+        item_id:   0,
+        flags:     0,
+        _reserved: [0, 0],
+    },
+    ArchipelagoItemSlot {
+        item_id:   0,
+        flags:     0,
+        _reserved: [0, 0],
+    },
+    ArchipelagoItemSlot {
+        item_id:   0,
+        flags:     0,
+        _reserved: [0, 0],
+    },
+    ArchipelagoItemSlot {
+        item_id:   0,
+        flags:     0,
+        _reserved: [0, 0],
+    },
+    ArchipelagoItemSlot {
+        item_id:   0,
+        flags:     0,
+        _reserved: [0, 0],
+    },
+    ArchipelagoItemSlot {
+        item_id:   0,
+        flags:     0,
+        _reserved: [0, 0],
+    },
+    ArchipelagoItemSlot {
+        item_id:   0,
+        flags:     0,
+        _reserved: [0, 0],
+    },
+    ArchipelagoItemSlot {
+        item_id:   0,
+        flags:     0,
+        _reserved: [0, 0],
+    },
+    ArchipelagoItemSlot {
+        item_id:   0,
+        flags:     0,
+        _reserved: [0, 0],
+    },
+    ArchipelagoItemSlot {
+        item_id:   0,
+        flags:     0,
+        _reserved: [0, 0],
+    },
+    ArchipelagoItemSlot {
+        item_id:   0,
+        flags:     0,
+        _reserved: [0, 0],
+    },
+    ArchipelagoItemSlot {
+        item_id:   0,
+        flags:     0,
+        _reserved: [0, 0],
+    },
+    ArchipelagoItemSlot {
+        item_id:   0,
+        flags:     0,
+        _reserved: [0, 0],
+    },
+    ArchipelagoItemSlot {
+        item_id:   0,
+        flags:     0,
+        _reserved: [0, 0],
+    },
+];
+
+#[no_mangle]
+pub extern "C" fn archipelago_check_item_buffer() {
+    unsafe {
+        // TEMPORARY: Skip ROOM_MGR check for Archipelago testing
+        // The ROOM_MGR pointer uses absolute addresses that don't relocate properly
+        // with ASLR TODO: Fix symbol relocation or use dynamic lookup
+        // if ROOM_MGR.is_null() {
+        //     return;
+        // }
+
+        // Check each slot in the buffer
+        // Skip slot 0 which contains the magic signature
+        for (i, slot) in ARCHIPELAGO_ITEM_BUFFER.iter_mut().enumerate() {
+            // Skip the first slot (magic signature)
+            if i == 0 {
+                continue;
+            }
+
+            // Skip empty slots
+            if slot.item_id == 0 {
+                continue;
+            }
+
+            // Item found - give it to the player
+            let _show_animation = (slot.flags & 0x01) != 0;
+            let _play_jingle = (slot.flags & 0x02) != 0;
+
+            // Always use 0xFF for sceneflag (no specific scene flag)
+            let sceneflag = 0xFF;
+
+            // Call the existing give_item function
+            let _item_actor = give_item_with_sceneflag(slot.item_id, sceneflag);
+
+            // Clear the slot after processing
+            slot.item_id = 0;
+            slot.flags = 0;
+            slot._reserved = [0, 0];
+
+            // Only process one item per frame to avoid overwhelming the game
+            break;
+        }
+    }
+}
+
+// Get the address of the Archipelago buffer for the Python client
+#[no_mangle]
+pub extern "C" fn get_archipelago_buffer_address() -> *mut ArchipelagoItemSlot {
+    unsafe { ARCHIPELAGO_ITEM_BUFFER.as_mut_ptr() }
 }

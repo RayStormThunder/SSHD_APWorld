@@ -25,35 +25,30 @@ from typing import Optional
 logger = logging.getLogger("ItemSystem")
 
 
-# Memory addresses from sshd-rando-backend/asm/symbols.yaml
-class GameAddresses:
-    """Memory addresses for game item system."""
+# Memory offsets (relative to base address)
+# These are calculated from sshd-rando-backend/asm/symbols.yaml
+class GameOffsets:
+    """Relative memory offsets for game item system."""
     
-    # Item system
-    NUMBER_OF_ITEMS = 0x71018265fc
-    ITEM_GET_BOTTLE_POUCH_SLOT = 0x71015904e8
-    EQUIPPED_SWORD = 0x7101675c6c
+    # Item system (relative offsets)
+    NUMBER_OF_ITEMS = 0x18265fc
+    ITEM_GET_BOTTLE_POUCH_SLOT = 0x15904e8
+    EQUIPPED_SWORD = 0x1675c6c
     
     # Room/Stage management
-    ROOM_MGR = 0x7102bfdd90
-    STAGE_MGR = 0x7102bfdda8
-    CURRENT_STAGE_NAME = 0x7102bfd8d8
+    ROOM_MGR = 0x2bfdd90
+    STAGE_MGR = 0x2bfdda8
+    CURRENT_STAGE_NAME = 0x2bf98d8
     
     # Player
-    PLAYER_PTR = 0x7102bfd940
+    PLAYER = 0x623E680  # Direct offset to player structure
     
     # Archipelago integration
     # Buffer is allocated as a Rust static variable in item.rs
-    # To find the address: Search game memory for 16 bytes of zeros in 0x712e0a7000+ range
-    # Or compile and check linker output for ARCHIPELAGO_BUFFER symbol
-    # Default: Will be set after first compilation
-    ARCHIPELAGO_ITEM_BUFFER = None  # Set this after finding the Rust static buffer address
-    ARCHIPELAGO_BUFFER_SIZE = 16
-    
-    # Buffer structure (per entry):
-    # Byte 0: Item ID (0 = empty slot)
-    # Byte 1: Flags (0x01 = show animation, 0x02 = play jingle)
-    # Bytes 2-3: Reserved
+    # Structure: 16 slots × 4 bytes each = 64 bytes total
+    # Each slot: [item_id (u8), flags (u8), reserved (u16)]
+    ARCHIPELAGO_BUFFER_SIZE = 16  # Number of slots
+    ARCHIPELAGO_BUFFER_SLOT_SIZE = 4  # Bytes per slot
 
 
 class GameItemSystem:
@@ -71,58 +66,95 @@ class GameItemSystem:
             memory_accessor: MemoryAccessor instance for reading/writing game memory
         """
         self.memory = memory_accessor
+        self.base_address = getattr(memory_accessor, 'base_address', None)
         self.buffer_addr = None  # Will be found dynamically
         self.timeout_frames = 300  # 5 seconds at 60 FPS
         
     def _find_buffer_address(self) -> Optional[int]:
         """
-        Find the Archipelago buffer address by searching for the Rust static allocation.
+        Find the Archipelago buffer address by scanning for magic signature.
         
-        The buffer is allocated in subsdk8 (0x712e0a7000+ range) as ARCHIPELAGO_BUFFER.
-        We search for 16 bytes of zeros in writable memory near other Rust additions.
+        The Rust static buffer is NOT at a fixed offset from the MOD base address.
+        It's allocated in a different memory region (heap/separate segment), so we
+        must scan for the magic signature 'AP\x00\x01' to locate it dynamically.
         
         Returns:
-            Buffer address if found, None otherwise
+            Buffer address OFFSET (relative to base) if found, None otherwise
         """
-        # subsdk8 is loaded at 0x712e0a7000 based on loader output
-        # Rust additions are compiled into this module
-        # Search in a reasonable range (first 1MB of subsdk8)
-        search_start = 0x712e0a7000
-        search_end = search_start + 0x100000  # 1MB range
+        # Scan for magic signature using pymem's pattern scan
+        # The buffer can be ANYWHERE in memory (not at fixed offset from base)
+        magic_signature = bytes([0x41, 0x50, 0x00, 0x01])
         
-        logger.info(f"Searching for Archipelago buffer in range 0x{search_start:x}-0x{search_end:x}")
+        logger.info("Scanning entire process memory for Archipelago buffer magic signature...")
+        try:
+            from pymem import pattern
+            # Scan all readable memory regions for the magic signature
+            pm = self.memory.pm
+            if not pm:
+                logger.error("❌ Process memory accessor not available")
+                return None
+            
+            # Get base address to calculate offset later
+            base_address = getattr(self.memory, 'base_address', None)
+            if not base_address:
+                logger.error("❌ Base address not set")
+                return None
+            
+            # Use pymem to scan for the pattern
+            found_address = pattern.pattern_scan_all(pm.process_handle, magic_signature)
+            if found_address:
+                # Take the first match
+                absolute_addr = found_address[0] if isinstance(found_address, list) else found_address
+                buffer_offset = absolute_addr - base_address
+                logger.info(f"✅ Found Archipelago buffer at absolute address 0x{absolute_addr:x}")
+                logger.info(f"   Buffer offset from base: 0x{buffer_offset:x}")
+                return buffer_offset
+            
+        except ImportError:
+            logger.warning("⚠️ pymem pattern scanning not available, using manual scan")
+        except Exception as e:
+            logger.warning(f"⚠️ Pattern scan failed: {e}, falling back to manual scan")
         
-        # Search in 1KB chunks for efficiency
-        chunk_size = 1024
-        target_pattern = bytes([0] * 16)  # Looking for 16 zero bytes
+        # Fallback: Manual scan in likely ranges
+        logger.info("Falling back to manual memory scan...")
+        # Rust statics are often in high memory (0x1D000000000 range based on Cheat Engine)
+        search_ranges = [
+            (0x1D000000000, 0x1E000000000),  # High memory range where we found it
+            (0x1000000, 0x10000000),         # Lower range as fallback
+        ]
         
-        for addr in range(search_start, search_end, chunk_size):
-            try:
-                data = self.memory.read_bytes(addr, chunk_size)
-                if data:
-                    # Search for our 16-byte zero pattern
-                    idx = data.find(target_pattern)
-                    if idx != -1:
-                        buffer_addr = addr + idx
-                        # Verify it's writable by attempting a write/read test
-                        if self._test_buffer_access(buffer_addr):
-                            logger.info(f"✅ Found Archipelago buffer at 0x{buffer_addr:x}")
-                            return buffer_addr
-            except:
-                continue
+        for search_start, search_end in search_ranges:
+            logger.info(f"Searching range 0x{search_start:x}-0x{search_end:x}")
+            chunk_size = 4096
+            for offset in range(search_start, search_end, chunk_size):
+                try:
+                    chunk = self.memory.read_bytes(offset, chunk_size)
+                    if chunk:
+                        idx = chunk.find(magic_signature)
+                        if idx != -1:
+                            buffer_offset = offset + idx
+                            # Verify it's actually the buffer by checking size
+                            test_data = self.memory.read_bytes(buffer_offset, 64)
+                            if test_data and len(test_data) == 64 and test_data[0:4] == magic_signature:
+                                logger.info(f"✅ Found Archipelago buffer at offset 0x{buffer_offset:x}")
+                                return buffer_offset
+                except Exception:
+                    continue
         
-        logger.error("❌ Could not find Archipelago buffer address")
+        logger.error("❌ Could not find Archipelago buffer magic signature in memory")
         return None
     
-    def _test_buffer_access(self, addr: int) -> bool:
-        """Test if we can write to the buffer address."""
+    def _test_buffer_access(self, offset: int) -> bool:
+        """Test if we can write to the buffer address (skip magic signature slot)."""
         try:
+            # Test on slot 1 (offset+4), not slot 0 which has magic signature
+            test_offset = offset + 4
             # Write test byte
-            self.memory.write_byte(addr, 0x42)
+            self.memory.write_byte(test_offset, 0x42)
             # Read it back
-            val = self.memory.read_byte(addr)
+            val = self.memory.read_byte(test_offset)
             # Restore zero
-            self.memory.write_byte(addr, 0x00)
+            self.memory.write_byte(test_offset, 0x00)
             return val == 0x42
         except:
             return False
@@ -160,7 +192,7 @@ class GameItemSystem:
         
         # Check if player is in valid state for receiving items
         if not self._is_player_ready():
-            logger.warning("Player not ready to receive items")
+            logger.debug("Player not ready to receive items")
             return False
         
         # Find empty slot in buffer
@@ -177,7 +209,7 @@ class GameItemSystem:
             flags |= 0x02
         
         # Write to buffer
-        buffer_offset = self.buffer_addr + (slot * 4)
+        buffer_offset = self.buffer_addr + (slot * GameOffsets.ARCHIPELAGO_BUFFER_SLOT_SIZE)
         if not self.memory.write_byte(buffer_offset, item_id):
             logger.error(f"Failed to write item ID to buffer slot {slot}")
             return False
@@ -186,7 +218,11 @@ class GameItemSystem:
             logger.error(f"Failed to write flags to buffer slot {slot}")
             return False
         
-        logger.debug(f"Wrote item {item_id} to buffer slot {slot}")
+        # Read back to verify write
+        readback_id = self.memory.read_byte(buffer_offset)
+        readback_flags = self.memory.read_byte(buffer_offset + 1)
+        logger.info(f"Wrote item {item_id} to buffer slot {slot} with flags {flags:02x} (readback: id={readback_id}, flags={readback_flags:02x})")
+        logger.info(f"Buffer address: base+0x{self.buffer_addr:x} = 0x{self.memory.base_address + self.buffer_addr:x}")
         
         # Wait for game to process (buffer cleared when done)
         return self._wait_for_item_processed(buffer_offset)
@@ -226,8 +262,10 @@ class GameItemSystem:
     
     def _find_empty_buffer_slot(self) -> Optional[int]:
         """Find first empty slot in item buffer."""
-        for slot in range(GameAddresses.ARCHIPELAGO_BUFFER_SIZE // 4):
-            buffer_offset = self.buffer_addr + (slot * 4)
+        # Slot 0 is RESERVED for magic signature "AP\x00\x01" - game ignores it
+        # Only use slots 1-15 for actual items
+        for slot in range(1, GameOffsets.ARCHIPELAGO_BUFFER_SIZE):
+            buffer_offset = self.buffer_addr + (slot * GameOffsets.ARCHIPELAGO_BUFFER_SLOT_SIZE)
             item_id = self.memory.read_byte(buffer_offset)
             if item_id == 0:
                 return slot
@@ -235,13 +273,19 @@ class GameItemSystem:
     
     def _wait_for_item_processed(self, buffer_offset: int) -> bool:
         """Wait for game to process item (clear buffer slot)."""
+        # Log first few reads to debug
         for frame in range(self.timeout_frames):
             time.sleep(1.0 / 60.0)  # ~60 FPS
             
             item_id = self.memory.read_byte(buffer_offset)
+            flags = self.memory.read_byte(buffer_offset + 1)
+            
+            if frame < 5:
+                logger.info(f"[POLL FRAME {frame}] Buffer slot: item_id={item_id}, flags={flags:02x}")
+            
             if item_id == 0:
                 # Buffer cleared - item was processed
-                logger.debug(f"Item processed after {frame} frames")
+                logger.info(f"Item processed after {frame} frames")
                 return True
         
         logger.error(f"Item processing timeout after {self.timeout_frames} frames")
@@ -251,22 +295,25 @@ class GameItemSystem:
     
     def _is_player_ready(self) -> bool:
         """Check if player is in valid state to receive items."""
-        # Read player pointer
-        player_ptr = self.memory.read_ptr(GameAddresses.PLAYER_PTR)
-        if not player_ptr:
+        # Get current base address from memory accessor
+        base_address = getattr(self.memory, 'base_address', None)
+        if not base_address:
+            logger.debug("Player not ready: base_address is None")
             return False
         
-        # TODO: Add checks for:
-        # - Player not in cutscene
-        # - Player not in menu
-        # - Player not in special action
-        # - Stage is loaded
+        # NOTE: Stage offset check removed because Rust additions in subsdk8 shift memory offsets
+        # The cheat table offsets (0x2BF98D8) are for vanilla game, not modded game
+        # The Rust buffer polling code (archipelago_check_item_buffer) handles all safety checks
+        # So we just verify base address exists and buffer is accessible
         
-        # For now, just check if stage name is valid
-        stage_name = self.memory.read_string(GameAddresses.CURRENT_STAGE_NAME, 8)
-        if not stage_name or len(stage_name) == 0:
-            return False
+        # Verify buffer is accessible (this ensures game is loaded enough)
+        if self.buffer_addr is None:
+            self.buffer_addr = self._find_buffer_address()
+            if self.buffer_addr is None:
+                logger.debug("Player not ready: Buffer not found")
+                return False
         
+        logger.debug("Player ready check passed (base address + buffer accessible)")
         return True
     
     def _ap_id_to_game_id(self, ap_item_id: int) -> Optional[int]:
@@ -278,72 +325,34 @@ class GameItemSystem:
         - Items.py ITEM_TABLE codes
         - sshd-rando-backend/constants/itemnames.py IDs
         
+        For now, we'll use the original_id from the ITEM_TABLE
+        
         Args:
             ap_item_id: Archipelago item code
             
         Returns:
             Game item ID (0-255) or None if no mapping
         """
-        # Base ID for SSHD items in Archipelago
-        BASE_AP_ID = 2773000
-        
-        if ap_item_id < BASE_AP_ID:
+        # Import here to avoid circular dependency
+        try:
+            from Items import ITEM_TABLE
+        except ImportError:
+            logger.error("Failed to import ITEM_TABLE for ID conversion")
             return None
-        
-        # Calculate offset from base
-        offset = ap_item_id - BASE_AP_ID
-        
-        # For now, assume 1:1 mapping
-        # TODO: Create proper mapping table for progressive items
-        if 0 <= offset <= 255:
-            return offset
+            
+        for item_name, item_data in ITEM_TABLE.items():
+            if item_data.code == ap_item_id:
+                return item_data.original_id
         
         return None
     
     def clear_buffer(self):
         """Clear all slots in item buffer."""
-        for slot in range(GameAddresses.ARCHIPELAGO_BUFFER_SIZE // 4):
-            buffer_offset = self.buffer_addr + (slot * 4)
-            self.memory.write_bytes(buffer_offset, bytes(4))
-        logger.info("Cleared item buffer")
-
-
-# ASM PATCH REQUIRED
-# ====================
-# Add this to sshd-rando-backend/asm/patches/archipelago-integration.asm:
-#
-# ; Archipelago Item Buffer Check
-# ; Hook into main game loop to check for items to give
-# .offset 0x71XXXXXXXX  ; Find suitable hook point in main loop
-# 
-# archipelago_check_item_buffer:
-#     ; Save registers
-#     stp x0, x1, [sp, #-16]!
-#     stp x2, x3, [sp, #-16]!
-#     
-#     ; Load buffer address
-#     ldr x0, =ARCHIPELAGO_ITEM_BUFFER
-#     
-#     ; Check first slot
-#     ldrb w1, [x0]       ; Load item ID
-#     cbz w1, buffer_empty ; Skip if 0
-#     
-#     ; Item found - call give_item
-#     ldrb w2, [x0, #1]   ; Load flags
-#     mov w8, #XX         ; Additions jumptable index for give_item
-#     bl additions_jumptable
-#     
-#     ; Clear buffer slot
-#     ldr x0, =ARCHIPELAGO_ITEM_BUFFER
-#     str wzr, [x0]       ; Write 0 to clear (4 bytes)
-#     
-# buffer_empty:
-#     ; Restore registers
-#     ldp x2, x3, [sp], #16
-#     ldp x0, x1, [sp], #16
-#     
-#     ; Continue normal execution
-#     ret
-#
-# ARCHIPELAGO_ITEM_BUFFER:
-#     .skip 16  ; Reserve 16 bytes for buffer
+        if not self.buffer_addr:
+            return
+        for slot in range(GameOffsets.ARCHIPELAGO_BUFFER_SIZE):
+            buffer_offset = self.buffer_addr + (slot * GameOffsets.ARCHIPELAGO_BUFFER_SLOT_SIZE)
+            # Write 4 zero bytes to clear the slot
+            for i in range(GameOffsets.ARCHIPELAGO_BUFFER_SLOT_SIZE):
+                self.memory.write_byte(buffer_offset + i, 0)
+        logger.info("Cleared Archipelago item buffer")

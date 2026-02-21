@@ -1,12 +1,13 @@
 {
     "game": "Skyward Sword HD",
-    "package_version": "0.1.0",
+    "package_version": "1.0.0",
+    "world_version": "1.0.0",
     "display_name": "The Legend of Zelda: Skyward Sword HD",
     "authors": ["Wesley-Playz"],
     "compatibility_version": 0,
     "compatible_version": 6,
     "versions": {
-        "0.1.0": {
+        "1.0.0": {
             "game_version": "v1.0.0",
             "release_date": "2025-01-26"
         }

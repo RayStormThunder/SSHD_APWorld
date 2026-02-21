@@ -356,7 +356,7 @@ class RyujinxMemoryReader:
             logger.debug(f"Memory scan completed with result: {result}")
             
             if result:
-                logger.info(f"Scan successful - base address: 0x{self.base_address:X}")
+                logger.debug(f"Scan successful - base address: 0x{self.base_address:X}")
             else:
                 logger.error("Scan failed - signature not found")
             
@@ -454,7 +454,7 @@ class RyujinxMemoryReader:
                                 print(f"[INFO] Signature at 0x{signature_address:X}, region protect={mbi.Protect:#x} type={mbi.Type:#x}")
                                 print(f"[SCAN] Took {elapsed:.1f}s, {chunks_scanned} chunks in {regions_scanned} regions")
                                 self.base_address = potential_base
-                                logger.info(f"Found SSHD base address: 0x{self.base_address:X} (took {elapsed:.1f}s)")
+                                logger.info(f"Found SSHD base address (took {elapsed:.1f}s)")
                                 return True
                         except Exception:
                             pass  # skip unreadable sub-chunks within this region
@@ -611,10 +611,10 @@ class SSHDClientCommandProcessor(ClientCommandProcessor):
     def _cmd_sshd(self):
         """Show SSHD client status."""
         if isinstance(self.ctx, SSHDContext):
-            logger.info(f"Connected to Ryujinx: {self.ctx.memory.connected}")
+            logger.debug(f"Connected to Ryujinx: {self.ctx.memory.connected}")
             if self.ctx.memory.base_address:
-                logger.info(f"Base address: 0x{self.ctx.memory.base_address:X}")
-            logger.info(f"Locations checked: {len(self.ctx.checked_locations)}")
+                logger.debug(f"Base address: 0x{self.ctx.memory.base_address:X}")
+            logger.debug(f"Locations checked: {len(self.ctx.checked_locations)}")
         else:
             logger.warning("Not connected to SSHD context")
     
@@ -643,7 +643,7 @@ class SSHDContext(CommonContext):
     command_processor = SSHDClientCommandProcessor
     tags = {"AP"}  # Game client tags (not TextOnly)
     game = "Skyward Sword HD"
-    items_handling = 0b111  # Full remote item handling
+    items_handling = 0b101  # Receive items from others, but not your own (those come from in-game pickups)
     
     def __init__(self, server_address: Optional[str], password: Optional[str]):
         super().__init__(server_address, password)
@@ -657,9 +657,9 @@ class SSHDContext(CommonContext):
         self.slot_data: dict = {}  # Slot data from server containing location-to-item mapping
         
         # Debug: Verify tags are set correctly
-        logger.info(f"SSHDContext initialized with tags: {self.tags}")
-        logger.info(f"Game: {self.game}")
-        logger.info(f"Items handling: {self.items_handling}")
+        logger.debug(f"SSHDContext initialized with tags: {self.tags}")
+        logger.debug(f"Game: {self.game}")
+        logger.debug(f"Items handling: {self.items_handling}")
         
         # Initialize hint system
         self.hints = HintSystem() if HintSystem else None
@@ -775,7 +775,7 @@ class SSHDContext(CommonContext):
                     self.slot_options[option_name] = value
             
             logger.info(f"Connected to Archipelago as {self.auth}")
-            logger.info(f"Loaded {len(self.slot_options)} player options from slot data")
+            logger.debug(f"Loaded {len(self.slot_options)} player options from slot data")
             
             # Build the item-to-location mapping now that we have slot_data
             self.item_to_location = self.build_item_to_location_map()
@@ -785,18 +785,18 @@ class SSHDContext(CommonContext):
             if custom_flag_mapping:
                 # Convert string keys back to integers (JSON serialization converts int keys to strings)
                 self.custom_flag_to_location = {int(k): v for k, v in custom_flag_mapping.items()}
-                logger.info(f"Loaded custom flag mapping with {len(self.custom_flag_to_location)} flags")
+                logger.debug(f"Loaded custom flag mapping with {len(self.custom_flag_to_location)} flags")
             else:
-                logger.warning("No custom flag mapping found in slot data - location detection disabled")
+                logger.debug("No custom flag mapping found in slot data - location detection disabled")
             
             # Load location to custom flag mapping for vanilla item pickups
             location_to_flag_mapping = slot_data.get("location_to_custom_flag", {})
             if location_to_flag_mapping:
                 # Convert string keys back to integers
                 self.location_to_custom_flag = {int(k): v for k, v in location_to_flag_mapping.items()}
-                logger.info(f"Loaded {len(self.location_to_custom_flag)} location -> flag mappings for vanilla pickups")
+                logger.debug(f"Loaded {len(self.location_to_custom_flag)} location -> flag mappings for vanilla pickups")
             else:
-                logger.warning("No location→flag mapping found - vanilla pickups disabled")
+                logger.debug("No location→flag mapping found - vanilla pickups disabled")
 
             # Enable DeathLink if the player configured it
             death_link_enabled = slot_data.get("option_death_link", 0)  # Options use "option_" prefix
@@ -924,16 +924,6 @@ class SSHDContext(CommonContext):
                     else:
                         color = "white"
                     
-                    # Format message differently based on whether it's our own item
-                    if finding_player == self.slot:
-                        # Our own location check
-                        logger.info(f"{finder_name} found their {item_name} ({location_name})")
-                    else:
-                        # Item from another player
-                        receiver_name = self.player_names.get(receiving_player, f"Player {receiving_player}")
-                        logger.info(f"{finder_name} sent {item_name} to {receiver_name} ({location_name})")
-                    
-                    # Still call parent to ensure UI and file logging work
                     super().on_print_json(args)
                     return
             except Exception as e:
@@ -969,41 +959,41 @@ class SSHDContext(CommonContext):
                 # Tier 1-4: Goddess Longsword → White Sword → Master Sword → True Master Sword
                 sword_tiers = ["Goddess Longsword", "Goddess White Sword", "Master Sword", "True Master Sword"]
                 actual_item_name = sword_tiers[min(count - 1, 3)]
-                logger.info(f"Progressive Sword #{count} -> {actual_item_name}")
+                logger.debug(f"Progressive Sword #{count} -> {actual_item_name}")
             elif item_name == "Progressive Bow":
                 # Tier 1: base Bow (game item 19), 2: Iron Bow, 3: Sacred Bow
                 bow_tiers = ["Progressive Bow", "Iron Bow", "Sacred Bow"]
                 actual_item_name = bow_tiers[min(count - 1, 2)]
-                logger.info(f"Progressive Bow #{count} -> {actual_item_name}")
+                logger.debug(f"Progressive Bow #{count} -> {actual_item_name}")
             elif item_name == "Progressive Slingshot":
                 # Tier 1: base Slingshot (game item 52), 2: Scattershot
                 slingshot_tiers = ["Progressive Slingshot", "Scattershot"]
                 actual_item_name = slingshot_tiers[min(count - 1, 1)]
-                logger.info(f"Progressive Slingshot #{count} -> {actual_item_name}")
+                logger.debug(f"Progressive Slingshot #{count} -> {actual_item_name}")
             elif item_name == "Progressive Beetle":
                 # Tier 1: base Beetle (game item 53), 2: Hook, 3: Quick, 4: Tough
                 beetle_tiers = ["Progressive Beetle", "Hook Beetle", "Quick Beetle", "Tough Beetle"]
                 actual_item_name = beetle_tiers[min(count - 1, 3)]
-                logger.info(f"Progressive Beetle #{count} -> {actual_item_name}")
+                logger.debug(f"Progressive Beetle #{count} -> {actual_item_name}")
             elif item_name == "Progressive Mitts":
                 # Tier 1: base Mitts (game item 56), 2: Mogma Mitts
                 mitts_tiers = ["Progressive Mitts", "Mogma Mitts"]
                 actual_item_name = mitts_tiers[min(count - 1, 1)]
-                logger.info(f"Progressive Mitts #{count} -> {actual_item_name}")
+                logger.debug(f"Progressive Mitts #{count} -> {actual_item_name}")
             elif item_name == "Progressive Bug Net":
                 # Tier 1: base Bug Net (game item 71), 2: Big Bug Net
                 net_tiers = ["Progressive Bug Net", "Big Bug Net"]
                 actual_item_name = net_tiers[min(count - 1, 1)]
-                logger.info(f"Progressive Bug Net #{count} -> {actual_item_name}")
+                logger.debug(f"Progressive Bug Net #{count} -> {actual_item_name}")
             elif item_name == "Progressive Wallet":
                 # Tier 1: Medium Wallet (game item 108), 2: Big, 3: Giant, 4: Tycoon
                 wallet_tiers = ["Progressive Wallet", "Big Wallet", "Giant Wallet", "Tycoon Wallet"]
                 actual_item_name = wallet_tiers[min(count - 1, 3)]
-                logger.info(f"Progressive Wallet #{count} -> {actual_item_name}")
+                logger.debug(f"Progressive Wallet #{count} -> {actual_item_name}")
             elif item_name == "Progressive Pouch":
                 # All tiers give a Pouch Expansion (game item 113)
                 actual_item_name = "Pouch Expansion"
-                logger.info(f"Progressive Pouch #{count} -> {actual_item_name}")
+                logger.debug(f"Progressive Pouch #{count} -> {actual_item_name}")
         
         # Try using the new item system with animations
         if GameItemSystem:
@@ -1019,7 +1009,7 @@ class SSHDContext(CommonContext):
                     # so retries don't skip tiers
                     if is_progressive:
                         self.progressive_counts[item_name] = next_count
-                    logger.info(f"Gave {actual_item_name} with animation!")
+                    logger.debug(f"Gave {actual_item_name} with animation!")
                 else:
                     logger.warning(f"Failed to give {actual_item_name} via item system")
                 return success
@@ -1077,30 +1067,27 @@ class SSHDContext(CommonContext):
             
             # Update current stage
             if stage_name != self.current_stage:
-                logger.info(f"Entered stage: {stage_name}")
+                logger.debug(f"Entered stage: {stage_name}")
                 self.current_stage = stage_name
             
             # Give queued items to player
             if self.item_queue:
                 item_data = self.item_queue[0]
-                player_name = item_data.get("player_name", "another player")
-                location_name = item_data.get("location", "unknown location")
-                is_own_item = (item_data.get("location_player") == self.slot)
-                
-                # Skip local items - they're already given by the game when picked up
-                if is_own_item:
-                    logger.debug(f"[ItemQueue] Skipping local item {item_data['name']} from {location_name} (already given in-game)")
-                    self.item_queue.pop(0)
-                    self.delivered_item_count += 1
-                    self.save_progress()
-                else:
-                    # Give remote items via Archipelago buffer
-                    if self.give_item_to_player(item_data["name"], item_data["id"]):
-                        # Successfully gave item from another player
+                if self.give_item_to_player(item_data["name"], item_data["id"]):
+                    # Successfully gave item
+                    player_name = item_data.get("player_name", "another player")
+                    location_name = item_data.get("location", "unknown location")
+                    is_own_item = (item_data.get("location_player") == self.slot)
+                    
+                    if not is_own_item:
+                        # Received item from another player
                         logger.info(f"Received {item_data['name']} from {player_name} ({location_name})")
-                        
-                        # Remove from queue and persist delivery count
-                        self.item_queue.pop(0)
+                    else:
+                        # Received own item
+                        logger.info(f"Received {item_data['name']} ({location_name})")
+                    
+                    # Remove from queue and persist delivery count
+                    self.item_queue.pop(0)
                     self.delivered_item_count += 1
                     self.save_progress()
             
@@ -1216,10 +1203,10 @@ class SSHDContext(CommonContext):
                 
                 # DEBUG: Log addresses on first custom flag check
                 if not hasattr(self, '_logged_addresses'):
-                    logger.info(f"[DEBUG] Base address: 0x{self.memory.base_address:X}")
-                    logger.info(f"[DEBUG] SaveFile FA offset: 0x{file_a_offset:X}")
-                    logger.info(f"[DEBUG] Sceneflags offset within FA: 0x{OFFSET_FA_SCENEFLAGS:X}")
-                    logger.info(f"[DEBUG] Dungeonflags offset within FA: 0x{OFFSET_FA_DUNGEONFLAGS:X}")
+                    logger.debug(f"[DEBUG] Base address: 0x{self.memory.base_address:X}")
+                    logger.debug(f"[DEBUG] SaveFile FA offset: 0x{file_a_offset:X}")
+                    logger.debug(f"[DEBUG] Sceneflags offset within FA: 0x{OFFSET_FA_SCENEFLAGS:X}")
+                    logger.debug(f"[DEBUG] Dungeonflags offset within FA: 0x{OFFSET_FA_DUNGEONFLAGS:X}")
                     self._logged_addresses = True
                 
                 # Calculate flags offset within SaveFile structure
@@ -1238,8 +1225,8 @@ class SSHDContext(CommonContext):
                 if not hasattr(self, '_logged_flag_calcs'):
                     self._logged_flag_calcs = []
                 if len(self._logged_flag_calcs) < 3:
-                    logger.info(f"[DEBUG] Flag {flag_id}: scene={sceneindex}, upper={upper_flag}, lower={lower_flag}")
-                    logger.info(f"[DEBUG]   flags_base_offset=0x{flags_base_offset:X}, final offset=0x{flag_offset:X}")
+                    logger.debug(f"[DEBUG] Flag {flag_id}: scene={sceneindex}, upper={upper_flag}, lower={lower_flag}")
+                    logger.debug(f"[DEBUG]   flags_base_offset=0x{flags_base_offset:X}, final offset=0x{flag_offset:X}")
                     self._logged_flag_calcs.append(flag_id)
                 
                 current_u16 = self.memory.read_short(flag_offset)
@@ -1254,14 +1241,14 @@ class SSHDContext(CommonContext):
                     # Log every 50 polls to watch for changes
                     if len(self._logged_flag_calcs) < 3 and flag_id in self._logged_flag_calcs and self._flag_check_count % 50 == 0:
                         location_name = self.location_names.lookup_in_slot(location_code, self.slot)
-                        logger.info(f"[FlagValue] flag_id={flag_id}, u16=0x{current_u16:04X}, bit={lower_flag}, "
+                        logger.debug(f"[FlagValue] flag_id={flag_id}, u16=0x{current_u16:04X}, bit={lower_flag}, "
                                   f"state={flag_state}, prev={previous_state}, loc={location_name}")
                     
-                    # LOG ALL NON-ZERO VALUES IMMEDIATELY (not just first 3 flags)
-                    if current_u16 != 0:
+                    # LOG ALL SET FLAGS (only when the specific bit is 1, not just when u16 is non-zero)
+                    if flag_state == 1:
                         location_name = self.location_names.lookup_in_slot(location_code, self.slot)
                         absolute_address = self.memory.base_address + flag_offset
-                        logger.warning(f"[FlagValue] NON-ZERO! flag_id={flag_id}, u16=0x{current_u16:04X}, bit={lower_flag}, "
+                        logger.debug(f"[FlagValue] SET! flag_id={flag_id}, u16=0x{current_u16:04X}, bit={lower_flag}, "
                                      f"state={flag_state}, prev={previous_state}, offset=0x{flag_offset:X}, abs=0x{absolute_address:X}, "
                                      f"scene={sceneindex}, upper={upper_flag}, loc={location_name}")
                     
@@ -1336,7 +1323,7 @@ class SSHDContext(CommonContext):
                 if is_checked:
                     self.checked_locations.add(location_id)
                     location_name_display = location_name[:50]  # Truncate long names
-                    logger.info(f"✅ Location checked: {location_name_display}")
+                    logger.info(f"Location checked: {location_name_display}")
                     
             except Exception as e:
                 logger.debug(f"Error checking location {location_name}: {e}")
@@ -1369,7 +1356,7 @@ class SSHDContext(CommonContext):
                         item_to_loc[item_code] = location_code
             
             if item_to_loc:
-                logger.info(f"Built item_to_location map with {len(item_to_loc)} entries from patch data")
+                logger.debug(f"Built item_to_location map with {len(item_to_loc)} entries from patch data")
                 return item_to_loc
         
         # Alternative: Build from slot_data if it has item placements
@@ -1383,7 +1370,7 @@ class SSHDContext(CommonContext):
                     continue
             
             if item_to_loc:
-                logger.info(f"Built item_to_location map with {len(item_to_loc)} entries from slot_data")
+                logger.debug(f"Built item_to_location map with {len(item_to_loc)} entries from slot_data")
                 return item_to_loc
         
         logger.debug("No item placement data found - item_to_location map is empty")
@@ -1686,8 +1673,21 @@ if __name__ == "__main__":
     import colorama
     logging.basicConfig(
         format="[%(name)s]: %(message)s",
-        level=logging.INFO
+        level=logging.DEBUG  # Allow debug messages in terminal
     )
+    
+    # Add filter to hide debug messages from GUI (they'll still show in terminal)
+    class DebugToTerminalOnly(logging.Filter):
+        """Filter that marks debug log records to skip GUI output"""
+        def filter(self, record):
+            # Mark debug-level messages to skip the GUI
+            if record.levelno == logging.DEBUG:
+                record.skip_gui = True
+            return True  # Always allow the record through (for terminal)
+    
+    # Apply the filter to the root logger so all loggers inherit it
+    logging.getLogger().addFilter(DebugToTerminalOnly())
+    
     colorama.just_fix_windows_console()
     asyncio.run(main())
     colorama.deinit()

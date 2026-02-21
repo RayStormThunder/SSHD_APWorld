@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 from BaseClasses import Region, Location, Item, Tutorial, ItemClassification as IC
+from Utils import Version
 from worlds.AutoWorld import WebWorld, World
 from worlds.Files import APPlayerContainer
 from worlds.LauncherComponents import (
@@ -54,7 +55,7 @@ if SSHD_RANDO_PATH.exists():
 
 # Version information
 AP_VERSION = [0, 6, 5]
-WORLD_VERSION = [0, 1, 0]  # Starting at 0.1.0 for SSHD
+WORLD_VERSION = [1, 0, 0]  # Version 1.0.0 for SSHD
 RANDO_VERSION = [0, 1, 0]
 
 

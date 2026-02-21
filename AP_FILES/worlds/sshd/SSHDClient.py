@@ -253,10 +253,22 @@ class RyujinxMemoryReader:
                     # Search for signature
                     offset = data.find(MEMORY_SIGNATURE)
                     if offset != -1:
-                        self.base_address = address + offset
-                        elapsed = time.time() - start_time
-                        logger.info(f"Found SSHD base address: 0x{self.base_address:X} (took {elapsed:.1f}s)")
-                        return True
+                        potential_base = address + offset
+                        
+                        # VALIDATION: Verify this is the correct base
+                        try:
+                            # Try reading from a known offset to validate
+                            test_read = self.pm.read_bytes(potential_base + 0x6288408, 8)  # OFFSET_FILE_MANAGER
+                            if test_read:
+                                self.base_address = potential_base
+                                elapsed = time.time() - start_time
+                                logger.info(f"Found and validated SSHD base address: 0x{self.base_address:X} (took {elapsed:.1f}s)")
+                                return True
+                            else:
+                                logger.warning(f"Found signature at 0x{potential_base:X} but validation failed - continuing search...")
+                        except Exception:
+                            logger.warning(f"Found signature at 0x{potential_base:X} but validation failed - continuing search...")
+                            pass
                     
                     address += chunk_size
                     

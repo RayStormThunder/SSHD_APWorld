@@ -97,7 +97,8 @@ class _ReqParser:
     """
     
     def __init__(self, resolved_settings: dict[str, str], known_items: set[str],
-                 macros: dict[str, Callable] = None, backend_dir: Path = None):
+                 macros: dict[str, Callable] = None, backend_dir: Path = None,
+                 vanilla_items: set[str] = None):
         self.resolved_settings = resolved_settings
         self.known_items = known_items  # Set of AP item names that exist
         self.macros: dict[str, Callable] = macros or {}
@@ -106,6 +107,9 @@ class _ReqParser:
         self.can_access_areas: set[str] = set()
         # Backend directory for loading data files
         self._backend_dir = backend_dir or _BACKEND_DIR
+        # Items that are collected in vanilla (not shuffled into AP pool).
+        # Any rule requiring these items is automatically satisfied.
+        self.vanilla_items: set[str] = vanilla_items or set()
         # Setting info for comparison operators — maps setting name -> list of option values
         self._setting_options: dict[str, list[str]] = {}
         self._load_setting_options()
@@ -339,6 +343,9 @@ class _ReqParser:
             parts = inner.split(",", 1)
             count_val = int(parts[0])
             item_name = _normalize_item_name(parts[1])
+            # If this item is collected in vanilla (not shuffled), rule is auto-satisfied
+            if item_name in self.vanilla_items:
+                return ALWAYS_TRUE
             if count_val == 1:
                 return lambda state, player, _i=item_name: state.has(_i, player)
             return lambda state, player, _c=count_val, _i=item_name: state.count(_i, player) >= _c
@@ -378,6 +385,9 @@ class _ReqParser:
         # Item check
         item_name = _normalize_item_name(atom)
         if item_name in self.known_items:
+            # If this item is collected in vanilla (not shuffled), rule is auto-satisfied
+            if item_name in self.vanilla_items:
+                return ALWAYS_TRUE
             return lambda state, player, _i=item_name: state.has(_i, player)
         
         # Check if it could be a setting we haven't seen
@@ -438,6 +448,9 @@ class _ReqParser:
     
     def _make_crystal_check(self, required: int) -> Callable:
         """Create a gratitude crystal count check function."""
+        # If gratitude crystals are collected in vanilla, rule is auto-satisfied
+        if "Gratitude Crystal" in self.vanilla_items:
+            return ALWAYS_TRUE
         def check_crystals(state: CollectionState, player: int) -> bool:
             singles = state.count("Gratitude Crystal", player)
             packs = state.count("Gratitude Crystal Pack", player)
@@ -477,8 +490,18 @@ class SSHDLogicConverter:
         # (sshd-rando references items by their exact names)
         self._add_extra_known_items()
         
+        # Build set of items that are collected in vanilla (not shuffled into AP).
+        # Rules that require these items are auto-satisfied since the player
+        # picks them up through normal in-game actions, not via AP.
+        vanilla_items = self._compute_vanilla_items()
+        
         # Parser instance
-        self.parser = _ReqParser(self.resolved_settings, self.known_items, backend_dir=self._backend_dir)
+        self.parser = _ReqParser(self.resolved_settings, self.known_items,
+                                 backend_dir=self._backend_dir,
+                                 vanilla_items=vanilla_items)
+        
+        # Excluded location types (computed from settings in _create_locations)
+        self.excluded_item_types: set[str] = set()  # Types excluded from item pool
         
         # Data structures built during conversion
         self.area_data: list[dict] = []  # Raw parsed YAML data
@@ -517,6 +540,52 @@ class SSHDLogicConverter:
             except Exception as e:
                 logger.warning(f"Could not load sshd-rando items.yaml: {e}")
     
+    def _compute_vanilla_items(self) -> set[str]:
+        """
+        Build the set of item names that are collected in vanilla (not shuffled).
+        When a shuffle setting is off, the corresponding items remain at their
+        original locations in-game and should not be tracked by AP.  Any logic
+        rule that checks for these items should be treated as auto-satisfied.
+        """
+        s = self.resolved_settings
+        vanilla: set[str] = set()
+
+        # Tadtone shuffle
+        if s.get("tadtone_shuffle", "off") not in ("on", "randomized"):
+            vanilla.add("Group of Tadtones")
+
+        # Gratitude crystal shuffle
+        if s.get("gratitude_crystal_shuffle", "off") not in ("on", "randomized"):
+            vanilla.add("Gratitude Crystal")
+            vanilla.add("Gratitude Crystal Pack")
+
+        # When goddess_chest_shuffle is ON, Goddess Chests become AP locations.
+        # Goddess Cubes are never AP locations (dummy items), but striking a
+        # cube is always possible when you can physically reach it. Add all
+        # Goddess Cube item names as vanilla so the logic auto-satisfies
+        # the cube-strike requirements for the corresponding chests.
+        if s.get("goddess_chest_shuffle", "off") in ("on", "randomized"):
+            locations_path = self._backend_dir / "data" / "locations.yaml"
+            if locations_path.exists():
+                try:
+                    with open(locations_path, "r", encoding="utf-8") as f:
+                        loc_data = yaml.safe_load(f)
+                    for loc in loc_data:
+                        if "Goddess Cube" in loc.get("types", []):
+                            cube_item = loc.get("original_item", "")
+                            if cube_item:
+                                vanilla.add(cube_item)
+                                # Also add apostrophe-stripped version for matching
+                                vanilla.add(cube_item.replace("'", ""))
+                    logger.info(f"Added {sum(1 for v in vanilla if 'Goddess Cube' in v)} Goddess Cube items as vanilla (goddess_chest_shuffle is on)")
+                except Exception as e:
+                    logger.warning(f"Could not load locations.yaml for Goddess Cube items: {e}")
+
+        if vanilla:
+            logger.info(f"Vanilla (non-shuffled) items for logic: {sorted(vanilla)}")
+
+        return vanilla
+
     def convert(self):
         """
         Main entry point. Loads macros, parses all world YAMLs,
@@ -531,11 +600,87 @@ class SSHDLogicConverter:
         self._build_location_rules()
         self._place_victory_event()
     
+    def _get_excluded_location_types(self) -> set[str]:
+        """
+        Determine which location types must be EXCLUDED from the AP world.
+        
+        Only truly internal/non-physical location types are excluded here.
+        All real in-game locations (Hidden Items, Rupees, etc.) are always
+        created as AP locations regardless of shuffle settings — any item
+        can be placed at any location that's within logic.
+        
+        Item pool filtering is separate (see __init__.py create_items).
+        """
+        excluded: set[str] = set()
+
+        # Goddess Cubes are dummy logic items (oarc: null) used internally by
+        # sshd-rando to link cube-strike locations to sky Goddess Chests.
+        # They have no in-game model and must never be AP locations.
+        excluded.add("Goddess Cube")
+
+        # Goddess Chests are the sky-side rewards unlocked by striking Goddess
+        # Cubes. When goddess_chest_shuffle is OFF, both Cubes and Chests are
+        # excluded. When ON, Chests become real AP locations and the Cube-strike
+        # requirements are auto-satisfied via vanilla_items.
+        s = self.resolved_settings
+        if s.get("goddess_chest_shuffle", "off") not in ("on", "randomized"):
+            excluded.add("Goddess Chests")
+
+        return excluded
+
+    def _get_excluded_item_types(self) -> set[str]:
+        """
+        Determine which location types' ITEMS should be excluded from the
+        AP item pool based on shuffle settings. When a shuffle is off, items
+        from those locations are replaced with filler in the pool, but the
+        locations themselves still exist in the AP world.
+        """
+        s = self.resolved_settings
+        excluded: set[str] = set()
+
+        # Simple on/off toggles: type excluded when setting is not "on"
+        _TOGGLE_MAP = {
+            "Tadtones":              "tadtone_shuffle",
+            "Gratitude Crystals":    "gratitude_crystal_shuffle",
+            "Stamina Fruits":        "stamina_fruit_shuffle",
+            "Hidden Items":          "hidden_item_shuffle",
+            "Goddess Chests":        "goddess_chest_shuffle",
+            "Gossip Stone Treasures": "gossip_stone_treasure_shuffle",
+            "Underground Rupees":    "underground_rupee_shuffle",
+        }
+        for loc_type, setting_key in _TOGGLE_MAP.items():
+            val = s.get(setting_key, "off")
+            if val not in ("on", "randomized"):
+                excluded.add(loc_type)
+
+        # NPC Closet shuffle: "vanilla" means off
+        if s.get("npc_closet_shuffle", "vanilla") == "vanilla":
+            excluded.add("Closets")
+
+        # Rupee shuffle is tiered: vanilla < beginner < intermediate < advanced
+        rupee_val = s.get("rupee_shuffle", "vanilla")
+        if rupee_val == "vanilla":
+            excluded.update(["Beginner Rupees", "Intermediate Rupees", "Advanced Rupees"])
+        elif rupee_val == "beginner":
+            excluded.update(["Intermediate Rupees", "Advanced Rupees"])
+        elif rupee_val == "intermediate":
+            excluded.add("Advanced Rupees")
+        # "advanced" → nothing extra excluded
+
+        # Goddess Cubes are dummy logic items — always exclude from pool too
+        excluded.add("Goddess Cube")
+
+        return excluded
+
     def _create_locations(self):
         """
         Create AP Location objects from LOCATION_TABLE and place them
         into their initial regions. The _build_location_rules step will
         later move them to fine-grained sshd-rando regions.
+        
+        All real in-game locations are created regardless of shuffle settings.
+        Only truly internal types (Goddess Cubes) are excluded.
+        Item pool filtering is handled separately in create_items().
         """
         try:
             from .Items import ITEM_TABLE as AP_ITEM_TABLE
@@ -550,9 +695,21 @@ class SSHDLogicConverter:
                 if loc_name not in yaml_location_areas:
                     yaml_location_areas[loc_name] = area_name
         
+        excluded_types = self._get_excluded_location_types()
+        if excluded_types:
+            logger.info(f"Excluding location types: {sorted(excluded_types)}")
+        
         locations_created = 0
+        locations_excluded = 0
         for name, data in self.location_table.items():
             if data.code is None:
+                continue
+            
+            # Exclude location types determined by _get_excluded_location_types():
+            # - Goddess Cubes: always excluded (dummy logic items, no in-game model)
+            # - Goddess Chests: excluded unless goddess_chest_shuffle is on
+            if excluded_types and any(t in excluded_types for t in data.types):
+                locations_excluded += 1
                 continue
             
             # Determine which region to place this location in:
@@ -580,6 +737,8 @@ class SSHDLogicConverter:
             region.locations.append(location)
             locations_created += 1
         
+        if locations_excluded:
+            logger.info(f"Excluded {locations_excluded} locations (shuffle settings off)")
         logger.info(f"Created {locations_created} locations")
     
     def _place_victory_event(self):

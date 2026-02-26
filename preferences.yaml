@@ -1,0 +1,9 @@
+output_dir: sshdr_output
+theme_mode: Auto
+theme_presets: Default
+use_custom_theme: false
+font_family: Figtree
+font_size: 10
+verified_extract: false
+tutorial_random_settings: false
+first_time_seed_gen_text: false

@@ -1308,12 +1308,126 @@ class SettingString(FreeText):
     display_name = "Setting String"
     default = ""
 
+# === Cheats ===
+
+class CheatInfiniteHealth(Toggle):
+    """
+    When enabled, the damage multiplier is forced to 0 so Link takes no damage.
+    Your health will never decrease from enemy attacks or hazards.
+    """
+    display_name = "Infinite Health"
+
+
+class CheatInfiniteStamina(Toggle):
+    """
+    When enabled, the stamina gauge is kept full at all times via memory writes.
+    You will never run out of stamina while sprinting, climbing, or spin-attacking.
+    """
+    display_name = "Infinite Stamina"
+
+
+class CheatInfiniteAmmo(Toggle):
+    """
+    When enabled, Arrow, Bomb, and Deku Seed counters are kept at their maximums.
+    You will never run out of ammunition.
+    """
+    display_name = "Infinite Arrows/Bombs/Seeds"
+
+
+class CheatInfiniteBugs(Toggle):
+    """
+    When enabled, the 'Start with All Bugs' setting is forced on,
+    giving you 99 of every bug from the start of the game.
+    The client also keeps your bug-ownership flags set each tick.
+    """
+    display_name = "Infinite Bugs"
+
+
+class CheatInfiniteMaterials(Toggle):
+    """
+    When enabled, the 'Start with All Treasures' setting is forced on,
+    giving you 99 of every treasure/material from the start of the game.
+    The client also keeps your treasure-ownership flags set each tick.
+    """
+    display_name = "Infinite Materials"
+
+
+class CheatInfiniteShield(Toggle):
+    """
+    When enabled, shield durability is kept at its maximum value.
+    Your equipped shield will never break.
+    """
+    display_name = "Infinite Shield Durability"
+
+
+class CheatInfiniteSkywardStrike(Toggle):
+    """
+    When enabled, the Skyward Strike active timer is kept charged.
+    Once charged, your sword stays charged indefinitely.
+    """
+    display_name = "Infinite Skyward Strike Time"
+
+
+class CheatInfiniteRupees(Toggle):
+    """
+    When enabled, the rupee counter is kept at the maximum value for your wallet.
+    You will always have enough rupees for any purchase.
+    """
+    display_name = "Infinite Rupees"
+
+
+class CheatMoonJump(Toggle):
+    """
+    When enabled, pressing Y gives Link a large upward velocity boost.
+    Hold Y to fly upward freely.
+    """
+    display_name = "Moon Jump"
+
+
+class CheatInfiniteBeetle(Toggle):
+    """
+    When enabled, the Beetle's flight timer is set to a very large value
+    via an ARM64 code patch. The Beetle will fly indefinitely without
+    returning automatically.
+    NOTE: This patches game code; may require a game restart to take effect.
+    """
+    display_name = "Infinite Beetle Flying Time"
+
+
+class CheatInfiniteLoftwing(Toggle):
+    """
+    When enabled, the Loftwing's spiral charge counter is kept at the
+    maximum (3 charges) at all times.
+    """
+    display_name = "Infinite Loftwing Charges"
+
+
+class CheatSpeedMultiplier(Range):
+    """
+    Multiplies Link's forward movement speed.
+    10 = normal (1.0x), 20 = double (2.0x), etc.
+    Values above 30 (3.0x) may cause collision issues.
+    """
+    display_name = "Speed Multiplier (x10)"
+    range_start = 10
+    range_end = 50
+    default = 10
+
+
 # === Archipelago-specific ===
 
 class SSHDDeathLink(DeathLink):
     """
     When you die, everyone dies. Of course the reverse is true too.
     """
+
+
+class SSHDBreathLink(Toggle):
+    """
+    When your stamina runs out, everyone's stamina runs out (and vice versa).
+    Think Death Link, but for stamina exhaustion instead of dying.
+    """
+    display_name = "Breath Link"
 
 
 @dataclass
@@ -1515,5 +1629,20 @@ class SSHDOptions(PerGameCommonOptions):
     sshdr_seed: SshdrSeed
     setting_string: SettingString
     
+    # Cheats
+    cheat_infinite_health: CheatInfiniteHealth
+    cheat_infinite_stamina: CheatInfiniteStamina
+    cheat_infinite_ammo: CheatInfiniteAmmo
+    cheat_infinite_bugs: CheatInfiniteBugs
+    cheat_infinite_materials: CheatInfiniteMaterials
+    cheat_infinite_shield: CheatInfiniteShield
+    cheat_infinite_skyward_strike: CheatInfiniteSkywardStrike
+    cheat_infinite_rupees: CheatInfiniteRupees
+    cheat_moon_jump: CheatMoonJump
+    cheat_infinite_beetle: CheatInfiniteBeetle
+    cheat_infinite_loftwing: CheatInfiniteLoftwing
+    cheat_speed_multiplier: CheatSpeedMultiplier
+    
     # Archipelago
     death_link: SSHDDeathLink
+    breath_link: SSHDBreathLink

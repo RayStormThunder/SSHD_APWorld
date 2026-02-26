@@ -234,17 +234,17 @@ def build_apworld():
         destination = custom_worlds_dir / "sshd.apworld"
         try:
             shutil.copy2(output_file, destination)
-            print(f"✓ Auto-deployed to: {destination}")
+            print(f"[OK] Auto-deployed to: {destination}")
             
             # Clean up extracted sshd directory to force reload
             extracted_dir = custom_worlds_dir / "sshd"
             if extracted_dir.exists():
                 shutil.rmtree(extracted_dir)
-                print(f"✓ Cleaned extracted cache: {extracted_dir}")
+                print(f"[OK] Cleaned extracted cache: {extracted_dir}")
         except Exception as e:
-            print(f"⚠ Warning: Could not auto-deploy - {e}")
+            print(f"[!] Warning: Could not auto-deploy - {e}")
     else:
-        print(f"⚠ Custom worlds directory not found: {custom_worlds_dir}")
+        print(f"[!] Custom worlds directory not found: {custom_worlds_dir}")
         print("Manual deployment needed - copy sshd.apworld to your Archipelago custom_worlds folder")
     
     print()

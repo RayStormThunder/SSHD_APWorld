@@ -8,10 +8,12 @@ with the Archipelago server to enable multiworld randomizer support.
 import asyncio
 import json
 import logging
+import math
 import os
 import struct
 import sys
 import time
+from pathlib import Path
 from typing import Optional, Set, Dict, Any
 
 # Add parent directory to path to find Archipelago modules when running as exe
@@ -182,19 +184,105 @@ OFFSET_FA_TEMPFLAGS = 0x50F4           # Temp flags (CT shows at base+5AF3E48-5A
 OFFSET_FA_ZONEFLAGS = 0x50FC           # Zone flags (CT shows at base+5AF3E50-5AEAD54)
 
 # Player structure offsets (relative to OFFSET_PLAYER)
-OFFSET_POS_X = 0x144               # Player X position
-OFFSET_POS_Y = 0x148               # Player Y position
-OFFSET_POS_Z = 0x14C               # Player Z position
-OFFSET_VELOCITY_X = 0x1E8          # Velocity X
-OFFSET_VELOCITY_Y = 0x1EC          # Velocity Y
-OFFSET_VELOCITY_Z = 0x1F0          # Velocity Z
-OFFSET_ACTION_FLAGS = 0x460        # Action flags
-OFFSET_ACTION_FLAGS_MORE = 0x464   # More action flags
+# All offsets verified against Rust struct definitions in:
+#   player.rs  (dPlayer),  actor.rs (dAcOBasemembers / dAcBasemembers),
+#   input.rs   (BUTTON_INPUTS enum),  math.rs (Vec3f / Vec3s)
+OFFSET_POS_X = 0x144               # dAcBasemembers.pos.x  (f32)
+OFFSET_POS_Y = 0x148               # dAcBasemembers.pos.y  (f32)
+OFFSET_POS_Z = 0x14C               # dAcBasemembers.pos.z  (f32)
+OFFSET_ANGLE_Y = 0x13E             # dAcBasemembers.rot.y  (u16, full turn = 65536)
+OFFSET_VELOCITY_X = 0x1E8          # dAcOBasemembers.velocity.x  (f32)
+OFFSET_VELOCITY_Y = 0x1EC          # dAcOBasemembers.velocity.y  (f32)
+OFFSET_VELOCITY_Z = 0x1F0          # dAcOBasemembers.velocity.z  (f32)
+OFFSET_FORWARD_SPEED = 0x1DC       # dAcOBasemembers.forward_speed  (f32)
+OFFSET_ACTION_FLAGS = 0x460        # dPlayer.action_flags  (u32)
+OFFSET_ACTION_FLAGS_MORE = 0x464   # dPlayer.action_flags_cont  (u32)
+OFFSET_CURRENT_ACTION = 0x468      # dPlayer.current_action  (PLAYER_ACTIONS, u32)
+OFFSET_TRIGGERED_BUTTONS = 0x63F8  # dPlayer.triggered_buttons  (u16, set for ONE frame on press)
+OFFSET_HELD_BUTTONS = 0x63FC       # dPlayer.held_buttons  (u16, set while button is held)
+OFFSET_B_WHEEL_EQUIPPED = 0x6408   # dPlayer.equipped_b_item  (u16)
+OFFSET_STAMINA = 0x64D8            # dPlayer.stamina_amount  (u32)
+OFFSET_STAMINA_RECOVERY_TIMER = 0x6414  # dPlayer.stamina_recovery_timer  (u16)
+OFFSET_STAMINA_EXHAUSTION_FLAG = 0x6416 # dPlayer.something_we_use_for_stamina  (u8)
+OFFSET_SKYWARD_STRIKE_TIMER = 0x641E    # dPlayer.skyward_strike_timer  (u16)  — was 0x641C!
 OFFSET_GAME_STATE = 0x2BF98A0      # Game state flags (dialogue, cutscene, etc.)
-OFFSET_B_WHEEL_EQUIPPED = 0x6408   # B-wheel equipped item
-OFFSET_CURRENT_HEALTH = 0x5AF005A  # Current hearts (2 bytes) - from File Mgr->FA structure (CE: base+0x5AF005A)
+OFFSET_CURRENT_HEALTH = 0x5AF005A  # Current hearts (2 bytes) - from File Mgr->FA structure
 OFFSET_HEALTH_CAPACITY = 0x5302    # Max hearts (2 bytes)
-OFFSET_STAMINA = 0x64D8            # Stamina gauge
+
+# Cheat-related offsets (relative to base address, from cheat table)
+# Ammo counters are bit-packed in the committed item flags area
+# SaveFile A is at base + OFFSET_SAVEFILE_A (0x5AEAD54)
+# Itemflags start at SaveFile + 0x9E4
+# Committed counters:
+#   Rupee:    itemflags+0x70+0xA, 20 bits from bit 0
+#   Arrow:    itemflags+0x70+0xE, 7 bits from bit 0
+#   Bomb:     itemflags+0x70+0xE, 7 bits from bit 7
+#   DekuSeed: itemflags+0x70+0xC, 7 bits from bit 7
+# Uncommitted counters (static):
+#   Rupee:    base+0x182E170+0x70+0xA
+#   Arrow:    base+0x182E170+0x70+0xE
+#   Bomb:     base+0x182E170+0x70+0xE
+#   DekuSeed: base+0x182E170+0x70+0xC
+
+# Button bitmask values for dPlayer.held_buttons (u16 at +0x63FC)
+# IMPORTANT: These do NOT match the Rust BUTTON_INPUTS enum in input.rs!
+# The BUTTON_INPUTS enum is for the InputMgr vtable API.
+# The held_buttons field uses a different encoding, verified by Cheat Engine:
+#   Y held → held_buttons = 0x0800
+#   X held → held_buttons = 0x0400
+#   Both   → held_buttons = 0x0C00
+# This matches Atmosphere HID encoding shifted left 8 bits.
+BUTTON_A           = 0x0100
+BUTTON_B           = 0x0200
+BUTTON_X           = 0x0400  # Verified via Cheat Engine
+BUTTON_Y           = 0x0800  # Verified via Cheat Engine
+BUTTON_MINUS       = 0x1000
+BUTTON_ZL          = 0x2000
+BUTTON_L           = 0x4000
+
+# Speed override field — past the end of the mapped dPlayer struct (0x64DC),
+# but confirmed by Atmosphere cheats on v1.0.1:
+#   [*Speed R]       → 04000000 06244B68 42880000  (68.0)
+#   [Run Speed (L)]  → 04000000 06244B68 42900000  (72.0)
+#   06244B68 - 0623E680 = 0x64E8
+OFFSET_SPEED_OVERRIDE = 0x64E8  # f32, controls movement speed (player-relative)
+
+# Shield-related offsets
+OFFSET_SHIELD_POUCH_SLOT = 0x53B1  # u8, index into pouch_items for equipped shield (relative to SaveFile A)
+OFFSET_POUCH_ITEMS = 0x7C0         # [i32; 8], pouch item slots (relative to SaveFile A)
+OFFSET_SHIELD_BURN_TIMER = 0x642C  # dPlayer.shield_burn_timer (u16)  — was 0x6484!
+
+# Shield item IDs (low byte of pouch_items entry)
+SHIELD_IDS = {116, 117, 118, 119, 120, 121, 122, 123, 124, 125}
+# Wooden=116, Banded=117, Braced=118, Iron=119, Reinforced=120, Fortified=121,
+# Sacred=122, Divine=123, Goddess=124, Hylian=125
+
+# Bug boolean itemflag IDs (these are single-bit flags in the itemflags u16[64] array)
+# Flag ID 0x8D-0x98 (141-152)
+BUG_ITEMFLAG_IDS = list(range(0x8D, 0x99))  # 12 bugs
+
+# Treasure/material boolean itemflag IDs
+# Flag ID 0xA1-0xB0 (161-176)
+TREASURE_ITEMFLAG_IDS = list(range(0xA1, 0xB1))  # 16 treasures
+
+# Beetle flying time cheat: ARM64 code patch
+# The original instruction at main+0x279CE4 loads a small timer value.
+# Patching it to `mov w8, #0x360` (0x52806C08) makes the beetle timer huge.
+# From Atmosphere cheat: [Inf Beetle Flying Time] 040E0000 00279CE4 52806C08
+OFFSET_BEETLE_TIMER_INSTRUCTION = 0x279CE4
+BEETLE_TIMER_PATCHED_VALUE = 0x52806C08  # ARM64: mov w8, #0x360
+
+# Loftwing spiral charge cheats (data writes, not code patches)
+# From Atmosphere cheats: write byte 0x03 to keep spiral charges at max (3)
+OFFSET_LOFTWING_CHARGE_A = 0x619936A  # Loftwing charge counter A
+OFFSET_LOFTWING_CHARGE_B = 0x6186B32  # Loftwing charge counter B (spiral charges)
+LOFTWING_MAX_CHARGES = 3
+
+# Stamina full value (from observing normal gameplay)
+STAMINA_FULL = 1000000  # Full stamina gauge value
+
+# Skyward strike timer value to keep it charged
+SKYWARD_STRIKE_CHARGED = 300  # Keep timer positive to stay charged
 
 # Current Stage Info offsets (relative to OFFSET_CURRENT_STAGE)
 OFFSET_STAGE_NAME = 0x0            # Stage name (8 byte string)
@@ -729,6 +817,21 @@ class RyujinxMemoryReader:
 class SSHDClientCommandProcessor(ClientCommandProcessor):
     """Command processor for SSHD-specific commands."""
     
+    # Map of cheat short names to attribute names
+    CHEAT_MAP = {
+        "health":          "cheat_infinite_health",
+        "stamina":         "cheat_infinite_stamina",
+        "ammo":            "cheat_infinite_ammo",
+        "bugs":            "cheat_infinite_bugs",
+        "materials":       "cheat_infinite_materials",
+        "shield":          "cheat_infinite_shield",
+        "skyward_strike":  "cheat_infinite_skyward_strike",
+        "rupees":          "cheat_infinite_rupees",
+        "moon_jump":       "cheat_moon_jump",
+        "beetle":          "cheat_infinite_beetle",
+        "loftwing":        "cheat_infinite_loftwing",
+    }
+    
     def __init__(self, ctx: CommonContext):
         super().__init__(ctx)
     
@@ -741,7 +844,42 @@ class SSHDClientCommandProcessor(ClientCommandProcessor):
             logger.debug(f"Locations checked: {len(self.ctx.checked_locations)}")
         else:
             logger.warning("Not connected to SSHD context")
-    
+
+    def _cmd_cheats(self):
+        """Show the status of all cheats (enabled/disabled)."""
+        if not isinstance(self.ctx, SSHDContext):
+            logger.warning("Not connected to SSHD context")
+            return
+        logger.info("=== Cheat Status ===")
+        for short_name, attr in self.CHEAT_MAP.items():
+            status = "ON" if getattr(self.ctx, attr, False) else "off"
+            logger.info(f"  {short_name:20s} {status}")
+        spd = self.ctx.cheat_speed_multiplier
+        logger.info(f"  {'speed':20s} {spd:.1f}x" + (" (normal)" if spd == 1.0 else ""))
+        logger.info("Use /cheat <name> to toggle. Names: " + ", ".join(self.CHEAT_MAP.keys()))
+
+    def _cmd_cheat(self, cheat_name: str = ""):
+        """Toggle a cheat on/off.  Usage: /cheat <name>
+        Names: health, stamina, ammo, bugs, materials, shield,
+               skyward_strike, rupees, moon_jump, hover, beetle, loftwing"""
+        if not isinstance(self.ctx, SSHDContext):
+            logger.warning("Not connected to SSHD context")
+            return
+        cheat_name = cheat_name.strip().lower()
+        if not cheat_name:
+            logger.info("Usage: /cheat <name>  — toggle a cheat on/off")
+            logger.info("Available: " + ", ".join(self.CHEAT_MAP.keys()))
+            return
+        if cheat_name not in self.CHEAT_MAP:
+            logger.warning(f"Unknown cheat '{cheat_name}'. Available: {', '.join(self.CHEAT_MAP.keys())}")
+            return
+        attr = self.CHEAT_MAP[cheat_name]
+        current = getattr(self.ctx, attr, False)
+        new_val = not current
+        setattr(self.ctx, attr, new_val)
+        status = "ON" if new_val else "OFF"
+        logger.info(f"Cheat '{cheat_name}' is now {status}")
+
     def _cmd_hints(self):
         """Show all received hints."""
         if isinstance(self.ctx, SSHDContext) and self.ctx.hints:
@@ -813,6 +951,28 @@ class SSHDContext(CommonContext):
         self.slot_options: Dict[str, Any] = {}  # Player options from slot data
         self.killed_by_deathlink: bool = False  # Flag to prevent sending death when killed by death link
         
+        # BreathLink state tracking
+        self.last_breath_link: float = 0.0      # For BreathLink echo prevention
+        self.last_stamina: Optional[int] = None  # Previous stamina reading (for detecting depletion)
+        self.exhausted_by_breathlink: bool = False  # Flag to prevent sending when exhausted by breath link
+        
+        # Cheat state (loaded from YAML at startup, may be overridden by slot_data on connect)
+        self.cheat_infinite_health: bool = False
+        self.cheat_infinite_stamina: bool = False
+        self.cheat_infinite_ammo: bool = False
+        self.cheat_infinite_bugs: bool = False
+        self.cheat_infinite_materials: bool = False
+        self.cheat_infinite_shield: bool = False
+        self.cheat_infinite_skyward_strike: bool = False
+        self.cheat_infinite_rupees: bool = False
+        self.cheat_moon_jump: bool = False
+        self.cheat_infinite_beetle: bool = False
+        self.cheat_infinite_loftwing: bool = False
+        self.cheat_speed_multiplier: float = 1.0  # 1.0 = normal
+        self.default_forward_speed: Optional[float] = None  # Cached normal speed
+        self.beetle_patch_applied: bool = False  # Track if beetle code patch was written
+        self._moon_jump_logged: bool = False    # One-time diagnostic log
+        
         # Location checking via custom flags
         self.previous_custom_flags: Dict[int, int] = {}  # custom_flag_id -> last_state (0 or 1)
         self.custom_flag_to_location: Dict[int, int] = {}  # custom_flag_id -> location_code
@@ -822,7 +982,118 @@ class SSHDContext(CommonContext):
         self.tracker_bridge = TrackerBridge() if TrackerBridge else None
         if self.tracker_bridge:
             logger.info(f"Tracker bridge initialized: {self.tracker_bridge.get_state_file_path()}")
-        
+
+        # Load cheats from player YAML immediately so they work before server connect
+        self._load_cheats_from_yaml()
+
+    def _load_cheats_from_yaml(self):
+        """
+        Load cheat settings from the player YAML file so cheats are active
+        as soon as the client starts (before connecting to the AP server).
+
+        Search order:
+          1. SkywardSwordHD.yaml next to the client script / .apworld
+          2. <Archipelago>/Players/SkywardSwordHD.yaml
+          3. <Archipelago>/SkywardSwordHD.yaml
+          4. Any *.yaml in <Archipelago>/Players/ whose game is "Skyward Sword HD"
+        """
+        yaml_name = "SkywardSwordHD.yaml"
+        candidates: list[Path] = []
+
+        # 1. Next to the running script / .apworld
+        script_dir = Path(os.path.dirname(os.path.abspath(__file__)))
+        candidates.append(script_dir / yaml_name)
+
+        # 2-3. Archipelago install directory
+        try:
+            from platform_utils import get_archipelago_dir
+            ap_dir = Path(str(get_archipelago_dir()))
+        except Exception:
+            if sys.platform == "win32":
+                ap_dir = Path(os.environ.get('PROGRAMDATA', 'C:\\ProgramData')) / 'Archipelago'
+            elif sys.platform == "linux":
+                ap_dir = Path.home() / '.local' / 'share' / 'Archipelago'
+            else:
+                ap_dir = Path.home() / 'Library' / 'Application Support' / 'Archipelago'
+        candidates.append(ap_dir / 'Players' / yaml_name)
+        candidates.append(ap_dir / yaml_name)
+
+        yaml_path: Optional[Path] = None
+        for c in candidates:
+            if c.is_file():
+                yaml_path = c
+                break
+
+        # 4. Fallback: scan Players/ for any yaml with game = Skyward Sword HD
+        if yaml_path is None:
+            players_dir = ap_dir / 'Players'
+            if players_dir.is_dir():
+                for f in players_dir.glob('*.yaml'):
+                    try:
+                        import yaml as _yaml
+                        with open(f, 'r', encoding='utf-8') as fh:
+                            data = _yaml.safe_load(fh)
+                        if isinstance(data, dict) and data.get('game') == 'Skyward Sword HD':
+                            yaml_path = f
+                            break
+                    except Exception:
+                        continue
+
+        if yaml_path is None:
+            logger.info("No player YAML found — cheats will be loaded when connecting to server.")
+            return
+
+        logger.info(f"Loading cheats from YAML: {yaml_path}")
+        try:
+            import yaml as _yaml
+            with open(yaml_path, 'r', encoding='utf-8') as fh:
+                data = _yaml.safe_load(fh)
+        except Exception as e:
+            logger.warning(f"Failed to parse YAML: {e}")
+            return
+
+        # The cheat keys live under  data["Skyward Sword HD"]  in the YAML
+        if not isinstance(data, dict):
+            return
+        game_section = data.get('Skyward Sword HD', {})
+        if not isinstance(game_section, dict):
+            return
+
+        self.cheat_infinite_health          = bool(game_section.get('cheat_infinite_health', False))
+        self.cheat_infinite_stamina         = bool(game_section.get('cheat_infinite_stamina', False))
+        self.cheat_infinite_ammo            = bool(game_section.get('cheat_infinite_ammo', False))
+        self.cheat_infinite_bugs            = bool(game_section.get('cheat_infinite_bugs', False))
+        self.cheat_infinite_materials       = bool(game_section.get('cheat_infinite_materials', False))
+        self.cheat_infinite_shield          = bool(game_section.get('cheat_infinite_shield', False))
+        self.cheat_infinite_skyward_strike  = bool(game_section.get('cheat_infinite_skyward_strike', False))
+        self.cheat_infinite_rupees          = bool(game_section.get('cheat_infinite_rupees', False))
+        self.cheat_moon_jump                = bool(game_section.get('cheat_moon_jump', False))
+        self.cheat_infinite_beetle          = bool(game_section.get('cheat_infinite_beetle', False))
+        self.cheat_infinite_loftwing        = bool(game_section.get('cheat_infinite_loftwing', False))
+        self.beetle_patch_applied = False
+
+        speed_raw = game_section.get('cheat_speed_multiplier', 10)
+        if isinstance(speed_raw, (int, float)) and speed_raw > 0:
+            self.cheat_speed_multiplier = speed_raw / 10.0
+
+        active = []
+        if self.cheat_infinite_health:          active.append("Infinite Health")
+        if self.cheat_infinite_stamina:         active.append("Infinite Stamina")
+        if self.cheat_infinite_ammo:            active.append("Infinite Ammo")
+        if self.cheat_infinite_bugs:            active.append("Infinite Bugs")
+        if self.cheat_infinite_materials:       active.append("Infinite Materials")
+        if self.cheat_infinite_shield:          active.append("Infinite Shield")
+        if self.cheat_infinite_skyward_strike:  active.append("Infinite Skyward Strike")
+        if self.cheat_infinite_rupees:          active.append("Infinite Rupees")
+        if self.cheat_moon_jump:                active.append("Moon Jump")
+        if self.cheat_infinite_beetle:          active.append("Infinite Beetle")
+        if self.cheat_infinite_loftwing:        active.append("Infinite Loftwing")
+        if self.cheat_speed_multiplier != 1.0:  active.append(f"Speed x{self.cheat_speed_multiplier:.1f}")
+        if active:
+            logger.info(f"Cheats loaded from YAML: {', '.join(active)}")
+        else:
+            logger.info("No cheats enabled in YAML.")
+
     async def server_auth(self, password_requested: bool = False):
         """Authenticate with the Archipelago server."""
         if password_requested and not self.password:
@@ -971,12 +1242,57 @@ class SSHDContext(CommonContext):
             if death_link_enabled:
                 self.tags.add("DeathLink")
                 logger.info("DeathLink enabled! Deaths will be shared with other players.")
-                # Send ConnectUpdate to notify server of new tags
-                asyncio.create_task(self.send_msgs([{"cmd": "ConnectUpdate", "tags": list(self.tags)}]))
-                logger.debug(f"Sent ConnectUpdate with tags: {list(self.tags)}")
             else:
                 self.tags.discard("DeathLink")
                 logger.info("DeathLink disabled.")
+
+            # Enable BreathLink if the player configured it
+            breath_link_enabled = slot_data.get("option_breath_link", 0)
+            if breath_link_enabled:
+                self.tags.add("BreathLink")
+                logger.info("BreathLink enabled! Stamina exhaustion will be shared with other players.")
+            else:
+                self.tags.discard("BreathLink")
+                logger.info("BreathLink disabled.")
+
+            # Load cheat settings from slot data
+            self.cheat_infinite_health = bool(slot_data.get("option_cheat_infinite_health", 0))
+            self.cheat_infinite_stamina = bool(slot_data.get("option_cheat_infinite_stamina", 0))
+            self.cheat_infinite_ammo = bool(slot_data.get("option_cheat_infinite_ammo", 0))
+            self.cheat_infinite_bugs = bool(slot_data.get("option_cheat_infinite_bugs", 0))
+            self.cheat_infinite_materials = bool(slot_data.get("option_cheat_infinite_materials", 0))
+            self.cheat_infinite_shield = bool(slot_data.get("option_cheat_infinite_shield", 0))
+            self.cheat_infinite_skyward_strike = bool(slot_data.get("option_cheat_infinite_skyward_strike", 0))
+            self.cheat_infinite_rupees = bool(slot_data.get("option_cheat_infinite_rupees", 0))
+            self.cheat_moon_jump = bool(slot_data.get("option_cheat_moon_jump", 0))
+            self.cheat_infinite_beetle = bool(slot_data.get("option_cheat_infinite_beetle", 0))
+            self.cheat_infinite_loftwing = bool(slot_data.get("option_cheat_infinite_loftwing", 0))
+            self.beetle_patch_applied = False  # Reset so patch is re-applied on reconnect
+            # Speed multiplier: stored as integer x10 (10=1.0x, 20=2.0x, etc.)
+            speed_raw = slot_data.get("option_cheat_speed_multiplier", 10)
+            self.cheat_speed_multiplier = speed_raw / 10.0
+            
+            active_cheats = []
+            if self.cheat_infinite_health: active_cheats.append("Infinite Health")
+            if self.cheat_infinite_stamina: active_cheats.append("Infinite Stamina")
+            if self.cheat_infinite_ammo: active_cheats.append("Infinite Ammo")
+            if self.cheat_infinite_bugs: active_cheats.append("Infinite Bugs")
+            if self.cheat_infinite_materials: active_cheats.append("Infinite Materials")
+            if self.cheat_infinite_shield: active_cheats.append("Infinite Shield")
+            if self.cheat_infinite_skyward_strike: active_cheats.append("Infinite Skyward Strike")
+            if self.cheat_infinite_rupees: active_cheats.append("Infinite Rupees")
+            if self.cheat_moon_jump: active_cheats.append("Moon Jump")
+            if self.cheat_infinite_beetle: active_cheats.append("Infinite Beetle")
+            if self.cheat_infinite_loftwing: active_cheats.append("Infinite Loftwing")
+            if self.cheat_speed_multiplier != 1.0: active_cheats.append(f"Speed x{self.cheat_speed_multiplier:.1f}")
+            if active_cheats:
+                logger.info(f"Cheats enabled: {', '.join(active_cheats)}")
+            else:
+                logger.info("No cheats enabled.")
+
+            # Send ConnectUpdate to notify server of tag changes (DeathLink/BreathLink)
+            asyncio.create_task(self.send_msgs([{"cmd": "ConnectUpdate", "tags": list(self.tags)}]))
+            logger.debug(f"Sent ConnectUpdate with tags: {list(self.tags)}")
 
             # Load persisted delivery count so we don't re-give items on reconnect
             self.load_progress()
@@ -1053,10 +1369,10 @@ class SSHDContext(CommonContext):
                     logger.info(f"Received hint: {hint_text}")
         
         elif cmd == "Bounced":
-            # Bounced packet - used for DeathLink
+            # Bounced packet - used for DeathLink and BreathLink
             logger.debug(f"[Bounced] Received bounced packet: {args}")
             tags = args.get("tags", [])
-            logger.debug(f"[Bounced] Tags: {tags}, DeathLink in tags: {'DeathLink' in tags}")
+            logger.debug(f"[Bounced] Tags: {tags}")
             if "DeathLink" in tags:
                 data = args.get("data", {})
                 logger.debug(f"[Bounced] DeathLink data: {data}")
@@ -1066,6 +1382,15 @@ class SSHDContext(CommonContext):
                     self.on_deathlink(data)
                 else:
                     logger.debug(f"[Bounced] Ignoring echo (time={data.get('time')} == last_death_link={self.last_death_link})")
+            if "BreathLink" in tags:
+                data = args.get("data", {})
+                logger.debug(f"[Bounced] BreathLink data: {data}")
+                # Prevent echo: ignore if this bounce came from our own exhaustion
+                if data.get("time", 0) != self.last_breath_link:
+                    logger.info(f"[Bounced] Triggering on_breathlink with data: {data}")
+                    self.on_breathlink(data)
+                else:
+                    logger.debug(f"[Bounced] Ignoring echo (time={data.get('time')} == last_breath_link={self.last_breath_link})")
     
     def on_print_json(self, args: dict):
         """
@@ -1228,6 +1553,22 @@ class SSHDContext(CommonContext):
                 logger.error(f"Error in Ryujinx connection task: {e}")
                 self.memory.connected = False
                 await asyncio.sleep(5)
+
+    async def cheat_loop_task(self):
+        """
+        Dedicated high-frequency loop for applying cheats (~60 Hz).
+        Runs independently from the main game-state loop so cheat
+        memory writes happen every ~16 ms instead of every 100 ms,
+        drastically reducing perceived input lag (e.g. moon jump).
+        """
+        while not self.exit_event.is_set():
+            try:
+                if self.memory.connected and self.memory.base_address:
+                    self._apply_cheats()
+                await asyncio.sleep(0.016)  # ~60 Hz
+            except Exception as e:
+                logger.error(f"Error in cheat loop: {e}")
+                await asyncio.sleep(0.5)  # Back off on error
     
     async def update_game_state(self):
         """
@@ -1306,6 +1647,26 @@ class SSHDContext(CommonContext):
                             await self.send_death(f"{self.auth} died in {stage_name}")
                 self.last_hearts = current_health
             
+            # Check for stamina exhaustion (for breath link)
+            current_stamina = self.memory.read_int(OFFSET_PLAYER + OFFSET_STAMINA)
+            if current_stamina is not None:
+                time_since_connect = time.time() - self.connection_time
+                if time_since_connect > 10.0:
+                    # Stamina just ran out if it went from >0 to 0
+                    if current_stamina == 0 and (self.last_stamina is not None and self.last_stamina > 0):
+                        if self.exhausted_by_breathlink:
+                            logger.debug("Stamina exhaustion detected, but caused by receiving breath link - not sending")
+                            self.exhausted_by_breathlink = False  # Clear flag
+                        elif "BreathLink" in self.tags:
+                            stage_name = STAGE_NAMES.get(self.current_stage, self.current_stage or "Skyloft")
+                            await self.send_breathlink(f"{self.auth} ran out of stamina in {stage_name}")
+                self.last_stamina = current_stamina
+            
+            # ============================================================
+            # Cheats are now applied in a dedicated 60 Hz loop
+            # (cheat_loop_task) for minimal input lag.
+            # ============================================================
+            
             # Check for completed locations using custom flags or LocationFlags.py data
             if self.custom_flag_to_location:
                 # Use custom flag system (preferred for SSHD)
@@ -1342,6 +1703,219 @@ class SSHDContext(CommonContext):
         except Exception as e:
             logger.error(f"Error updating game state: {e}")
     
+    def _apply_cheats(self):
+        """
+        Apply active cheats by writing to game memory each tick.
+        Called from cheat_loop_task() ~60 times per second.
+        Each cheat is wrapped in its own try/except so one failure
+        cannot prevent the others from running.
+        """
+        if not self.memory.connected or not self.memory.base_address:
+            return
+
+        player_base = OFFSET_PLAYER
+        any_cheat = (
+            self.cheat_infinite_health or self.cheat_infinite_stamina or
+            self.cheat_infinite_ammo or self.cheat_infinite_bugs or
+            self.cheat_infinite_materials or self.cheat_infinite_shield or
+            self.cheat_infinite_skyward_strike or self.cheat_infinite_rupees or
+            self.cheat_moon_jump or
+            self.cheat_infinite_beetle or
+            self.cheat_infinite_loftwing or self.cheat_speed_multiplier != 1.0
+        )
+        if not any_cheat:
+            return
+
+        # --- Infinite Health ---
+        if self.cheat_infinite_health:
+            try:
+                health_capacity = self.memory.read_short(OFFSET_CURRENT_HEALTH - 4)
+                if health_capacity and health_capacity > 0:
+                    self.memory.write_short(OFFSET_CURRENT_HEALTH, health_capacity)
+                else:
+                    self.memory.write_short(OFFSET_CURRENT_HEALTH, 72)
+            except Exception as e:
+                logger.debug(f"Cheat error (health): {e}")
+
+        # --- Infinite Stamina ---
+        if self.cheat_infinite_stamina:
+            try:
+                self.memory.write_int(player_base + OFFSET_STAMINA, STAMINA_FULL)
+                self.memory.write_byte(player_base + OFFSET_STAMINA_EXHAUSTION_FLAG, 0)
+                self.memory.write_short(player_base + OFFSET_STAMINA_RECOVERY_TIMER, 0)
+            except Exception as e:
+                logger.debug(f"Cheat error (stamina): {e}")
+
+        # --- Infinite Ammo ---
+        if self.cheat_infinite_ammo:
+            try:
+                itemflags_committed = OFFSET_SAVEFILE_A + 0x9E4
+                ammo_offset_arrows_bombs = itemflags_committed + 0x70 + 0xE
+                max_arrows_bombs = (10 << 7) | 20
+                self.memory.write_short(ammo_offset_arrows_bombs, max_arrows_bombs)
+
+                seed_offset = itemflags_committed + 0x70 + 0xC
+                current_seed_bytes = self.memory.read_short(seed_offset)
+                if current_seed_bytes is not None:
+                    new_val = (current_seed_bytes & 0x7F) | (20 << 7)
+                    self.memory.write_short(seed_offset, new_val)
+
+                itemflags_uncommitted_base = OFFSET_ITEM_FLAGS_STATIC
+                ammo_offset_uc = itemflags_uncommitted_base + 0x70 + 0xE
+                self.memory.write_short(ammo_offset_uc, max_arrows_bombs)
+                seed_offset_uc = itemflags_uncommitted_base + 0x70 + 0xC
+                current_seed_uc = self.memory.read_short(seed_offset_uc)
+                if current_seed_uc is not None:
+                    new_val_uc = (current_seed_uc & 0x7F) | (20 << 7)
+                    self.memory.write_short(seed_offset_uc, new_val_uc)
+            except Exception as e:
+                logger.debug(f"Cheat error (ammo): {e}")
+
+        # --- Infinite Bugs ---
+        if self.cheat_infinite_bugs:
+            try:
+                itemflags_base_c = OFFSET_SAVEFILE_A + 0x9E4
+                itemflags_base_u = OFFSET_ITEM_FLAGS_STATIC
+                for flag_id in BUG_ITEMFLAG_IDS:
+                    word_idx = flag_id // 16
+                    bit_idx  = flag_id % 16
+                    byte_off = word_idx * 2
+                    for base in (itemflags_base_c, itemflags_base_u):
+                        val = self.memory.read_short(base + byte_off)
+                        if val is not None and not (val & (1 << bit_idx)):
+                            self.memory.write_short(base + byte_off, val | (1 << bit_idx))
+            except Exception as e:
+                logger.debug(f"Cheat error (bugs): {e}")
+
+        # --- Infinite Materials ---
+        if self.cheat_infinite_materials:
+            try:
+                itemflags_base_c = OFFSET_SAVEFILE_A + 0x9E4
+                itemflags_base_u = OFFSET_ITEM_FLAGS_STATIC
+                for flag_id in TREASURE_ITEMFLAG_IDS:
+                    word_idx = flag_id // 16
+                    bit_idx  = flag_id % 16
+                    byte_off = word_idx * 2
+                    for base in (itemflags_base_c, itemflags_base_u):
+                        val = self.memory.read_short(base + byte_off)
+                        if val is not None and not (val & (1 << bit_idx)):
+                            self.memory.write_short(base + byte_off, val | (1 << bit_idx))
+            except Exception as e:
+                logger.debug(f"Cheat error (materials): {e}")
+
+        # --- Infinite Shield Durability ---
+        if self.cheat_infinite_shield:
+            try:
+                self.memory.write_short(player_base + OFFSET_SHIELD_BURN_TIMER, 0)
+                shield_slot = self.memory.read_byte(OFFSET_SAVEFILE_A + OFFSET_SHIELD_POUCH_SLOT)
+                if shield_slot is not None and shield_slot < 8:
+                    pouch_addr = OFFSET_SAVEFILE_A + OFFSET_POUCH_ITEMS + (shield_slot * 4)
+                    pouch_val = self.memory.read_int(pouch_addr)
+                    if pouch_val is not None:
+                        item_id = pouch_val & 0xFF
+                        if item_id in SHIELD_IDS:
+                            new_val = item_id | (0x30 << 16)
+                            if pouch_val != new_val:
+                                self.memory.write_int(pouch_addr, new_val)
+            except Exception as e:
+                logger.debug(f"Cheat error (shield): {e}")
+
+        # --- Infinite Skyward Strike ---
+        if self.cheat_infinite_skyward_strike:
+            try:
+                # skyward_strike_timer is u16 at dPlayer+0x641E (from player.rs)
+                current_timer = self.memory.read_short(player_base + OFFSET_SKYWARD_STRIKE_TIMER)
+                if current_timer is not None and current_timer > 0:
+                    self.memory.write_short(player_base + OFFSET_SKYWARD_STRIKE_TIMER, min(SKYWARD_STRIKE_CHARGED, 0xFFFF))
+            except Exception as e:
+                logger.debug(f"Cheat error (skyward strike): {e}")
+
+        # --- Infinite Rupees ---
+        if self.cheat_infinite_rupees:
+            try:
+                itemflags_committed = OFFSET_SAVEFILE_A + 0x9E4
+                rupee_offset = itemflags_committed + 0x70 + 0xA
+                current_val = self.memory.read_int(rupee_offset)
+                if current_val is not None:
+                    max_rupees = min(9999, 0xFFFFF)
+                    new_val = (current_val & 0xFFF00000) | max_rupees
+                    self.memory.write_int(rupee_offset, new_val)
+
+                rupee_offset_uc = OFFSET_ITEM_FLAGS_STATIC + 0x70 + 0xA
+                current_val_uc = self.memory.read_int(rupee_offset_uc)
+                if current_val_uc is not None:
+                    new_val_uc = (current_val_uc & 0xFFF00000) | max_rupees
+                    self.memory.write_int(rupee_offset_uc, new_val_uc)
+            except Exception as e:
+                logger.debug(f"Cheat error (rupees): {e}")
+
+        # --- Moon Jump ---
+        # Hold Y → lift Link upward.  Works from ground or mid-air.
+        # Writing velocity_y alone doesn't work on the ground because the
+        # game's ground-collision snaps Link back.  We fix this by ALSO
+        # directly incrementing pos_y each tick, which physically lifts
+        # Link off the surface and lets the velocity take over once airborne.
+        if self.cheat_moon_jump:
+            try:
+                btn_held = self.memory.read_short(player_base + OFFSET_HELD_BUTTONS)
+
+                # One-time diagnostic log
+                if not self._moon_jump_logged:
+                    btn_trig = self.memory.read_short(player_base + OFFSET_TRIGGERED_BUTTONS)
+                    logger.info(f"[MoonJump] held_buttons=0x{btn_held:04X}, triggered=0x{btn_trig:04X}" if btn_held is not None and btn_trig is not None else f"[MoonJump] button read returned None!")
+                    logger.info(f"[MoonJump] BUTTON_Y=0x{BUTTON_Y:04X} (CE-verified, NOT the InputMgr enum)")
+                    logger.info(f"[MoonJump] held_buttons offset=0x{player_base + OFFSET_HELD_BUTTONS:X}")
+                    self._moon_jump_logged = True
+
+                if btn_held is not None and (btn_held & BUTTON_Y):
+                    # 1. Directly lift Link's position (bypasses ground collision)
+                    cur_y = self.memory.read_float(player_base + OFFSET_POS_Y)
+                    if cur_y is not None:
+                        new_y = cur_y + 1.5  # ~90 units/sec at 60 Hz
+                        self.memory.write_float(player_base + OFFSET_POS_Y, new_y)
+                        # Keep hover height in sync so hover doesn't snap back
+                        if self._hover_y is not None:
+                            self._hover_y = new_y
+                    # 2. Also set upward velocity for smooth motion once airborne
+                    self.memory.write_float(player_base + OFFSET_VELOCITY_Y, 52.5)
+            except Exception as e:
+                logger.warning(f"Cheat error (moon_jump): {e}")
+
+        # --- Infinite Beetle Flying Time ---
+        if self.cheat_infinite_beetle and not self.beetle_patch_applied:
+            try:
+                current_instruction = self.memory.read_int(OFFSET_BEETLE_TIMER_INSTRUCTION)
+                if current_instruction is not None and current_instruction != BEETLE_TIMER_PATCHED_VALUE:
+                    success = self.memory.write_int(OFFSET_BEETLE_TIMER_INSTRUCTION, BEETLE_TIMER_PATCHED_VALUE)
+                    if success:
+                        self.beetle_patch_applied = True
+                        logger.info("Beetle time patch applied (ARM64 code patch at +0x279CE4)")
+                elif current_instruction == BEETLE_TIMER_PATCHED_VALUE:
+                    self.beetle_patch_applied = True
+            except Exception as e:
+                logger.debug(f"Cheat error (beetle): {e}")
+
+        # --- Infinite Loftwing Charges ---
+        if self.cheat_infinite_loftwing:
+            try:
+                self.memory.write_byte(OFFSET_LOFTWING_CHARGE_A, LOFTWING_MAX_CHARGES)
+                self.memory.write_byte(OFFSET_LOFTWING_CHARGE_B, LOFTWING_MAX_CHARGES)
+            except Exception as e:
+                logger.debug(f"Cheat error (loftwing): {e}")
+
+        # --- Speed Multiplier ---
+        if self.cheat_speed_multiplier != 1.0:
+            try:
+                current_speed = self.memory.read_float(player_base + OFFSET_FORWARD_SPEED)
+                if current_speed is not None and current_speed > 0.1:
+                    if self.default_forward_speed is None:
+                        self.default_forward_speed = current_speed
+                    if self.default_forward_speed and current_speed <= self.default_forward_speed * 1.1:
+                        new_speed = current_speed * self.cheat_speed_multiplier
+                        self.memory.write_float(player_base + OFFSET_FORWARD_SPEED, new_speed)
+            except Exception as e:
+                logger.debug(f"Cheat error (speed): {e}")
+
     async def check_custom_flags(self):
         """Check custom flags for location completion (SSHD-specific)."""
         if not self.memory.connected or not self.memory.base_address:
@@ -1664,6 +2238,62 @@ class SSHDContext(CommonContext):
                 }
             }])
     
+    def on_breathlink(self, data: dict):
+        """
+        Handle breath link - drain the player's stamina when someone else runs out.
+        Sets stamina to 0 and triggers the exhaustion state, same as the health trap
+        in traps.rs.
+        """
+        self.last_breath_link = max(data.get("time", 0.0), self.last_breath_link)
+
+        if not self.memory.connected or not self.memory.base_address:
+            logger.warning("BreathLink: Cannot drain stamina - not connected to game")
+            return
+
+        source = data.get('source', 'Unknown')
+        cause = data.get('cause', '') or f"{source} ran out of stamina"
+        logger.info(f"BreathLink: {cause}")
+
+        # Write all three stamina fields to trigger proper exhaustion
+        # (same approach as the health trap in traps.rs)
+        player_base = OFFSET_PLAYER
+
+        # Set stamina_amount to 0
+        s1 = self.memory.write_int(player_base + OFFSET_STAMINA, 0)
+        # Set exhaustion flag (something_we_use_for_stamina) to 0x5A
+        s2 = self.memory.write_byte(player_base + OFFSET_STAMINA_EXHAUSTION_FLAG, 0x5A)
+        # Set stamina_recovery_timer to 64 frames (~1-2 seconds of recovery delay)
+        s3 = self.memory.write_short(player_base + OFFSET_STAMINA_RECOVERY_TIMER, 64)
+
+        if s1 and s2 and s3:
+            logger.info(f"BreathLink: Drained stamina (3 fields written at player+0x{OFFSET_STAMINA:X})")
+            # Set flag to prevent sending breath link for this exhaustion
+            self.exhausted_by_breathlink = True
+        else:
+            logger.error(f"BreathLink: Failed to write stamina fields (success: amount={s1}, flag={s2}, timer={s3})")
+
+    async def send_breathlink(self, breath_text: str = ""):
+        """
+        Send a breath link notification to other players.
+        NOTE: The "BreathLink" tag name should be kept in sync with the SS AP (and otehr future games)
+        implementation for cross-game compatibility.
+        """
+        if "BreathLink" not in self.tags:
+            return
+
+        if self.server and self.server.socket:
+            self.last_breath_link = time.time()
+            logger.info("BreathLink: Sending stamina exhaustion to other players...")
+            await self.send_msgs([{
+                "cmd": "Bounce",
+                "tags": ["BreathLink"],
+                "data": {
+                    "time": self.last_breath_link,
+                    "source": self.auth,
+                    "cause": breath_text or f"{self.auth} ran out of stamina"
+                }
+            }])
+    
     def run_gui(self):
         """Run the GUI for the client."""
         from kvui import GameManager
@@ -1672,7 +2302,7 @@ class SSHDContext(CommonContext):
             logging_pairs = [
                 ("Client", "Archipelago"),
             ]
-            base_title = "Archipelago Skyward Sword HD Client"
+            base_title = "Archipelago Skyward Sword HD Client Version"
         
         self.ui = SSHDManager(self)
         self.ui_task = asyncio.create_task(self.ui.async_run(), name="UI")
@@ -1837,6 +2467,7 @@ async def main(args=None):
     
     print("="*60)
     print("Skyward Sword HD Archipelago Client")
+    print("  Build: dev-0.6.11")
     print("="*60)
     print(f"Starting client...")
     print(f"Arguments: {args}")
@@ -1878,6 +2509,9 @@ async def main(args=None):
     
     # Add Ryujinx connection task
     ctx.ryujinx_task = asyncio.create_task(ctx.ryujinx_connection_task(), name="Ryujinx Connection")
+
+    # Add dedicated high-frequency cheat loop (~60 Hz)
+    ctx.cheat_task = asyncio.create_task(ctx.cheat_loop_task(), name="Cheat Loop")
     
     if use_gui:
         print("Launching GUI...")

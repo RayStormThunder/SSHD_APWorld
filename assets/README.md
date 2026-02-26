@@ -49,6 +49,6 @@ When generating an Archipelago patch (`.apsshd` file):
 ## Original Randomizer Logo
 
 For reference, the original sshd-rando logo files can be found in:
-`sshd-rando/assets/sshdr-logo.tpl`
+`sshd-rando-backend/assets/sshdr-logo.tpl`
 
 You can use these as a template for dimensions and format.

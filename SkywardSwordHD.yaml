@@ -9,9 +9,33 @@ requires:
 
 Skyward Sword HD:
 
+  # ALL REQUIRED SETTINGS
+  #  - PATH TO EXTRACTED SSHD ROM FILES
+  #  - One of the three configuration methods (config.yaml, setting string, or manual settings)
+  # ALL RECOMMENDED SETTINGS
+  #  - Archipelago Options
+  #    - Death Link
+  #    - Progression Balancing
+  #    - Breath Link
+  # OPTIONAL SETTINGS
+  #  - Cheats
+  #    - Infinite Health
+  #    - Infinite Stamina
+  #    - Infinite Arrows/Bombs/Seeds
+  #    - Infinite Bugs
+  #    - Infinite Materials
+  #    - Infinite Shield Durability
+  #    - Infinite Skyward Strike Time
+  #    - Infinite Rupees
+  #    - Moon Jump
+  #    - Infinite Beetle Flying Time
+  #    - Infinite Loftwing Charges
+  #    - Speed Multiplier
+
+
 
   # ========================================
-  # REQUIRED: PATH TO EXTRACTED ROM FILES
+  # PATH TO EXTRACTED ROM FILES
   # ========================================
   
   # Path to extracted SSHD ROM (must contain romfs/ and exefs/ folders)
@@ -33,6 +57,10 @@ Skyward Sword HD:
   # Death Link: When you die, everyone dies (and vice versa)
   death_link: false
   
+  # Breath Link: When your stamina runs out, everyone's stamina runs out (and vice versa)
+  breath_link: false
+
+
   # Progression Balancing
   # Controls how much to front-load progression items to reduce waiting in multiworld
   # 0: Completely random placement (no balancing)
@@ -42,6 +70,78 @@ Skyward Sword HD:
   # 99: Maximum early placement
   # Higher values help prevent players from waiting on others for key items
   progression_balancing: 50
+
+
+
+  # ========================================
+  # CHEATS
+  # ========================================
+  # These cheats are applied in real-time by the client via memory writes.
+  # They do NOT affect randomizer logic or seed generation.
+
+  # Infinite Health
+  # When enabled, the randomizer's damage multiplier is forced to 0 (no damage).
+  # Your health will never decrease from enemy attacks or hazards.
+  cheat_infinite_health: false
+
+  # Infinite Stamina
+  # When enabled, your stamina gauge is kept full at all times.
+  # You will never run out of stamina while sprinting, climbing, or spin-attacking.
+  cheat_infinite_stamina: false
+
+  # Infinite Arrows/Bombs/Seeds
+  # When enabled, your Arrow, Bomb, and Deku Seed counters are kept at max.
+  # You will never run out of ammunition.
+  cheat_infinite_ammo: false
+
+  # Infinite Bugs
+  # When enabled, the randomizer's "Start with All Bugs" setting is forced on,
+  # giving you 99 of every bug from the start. The client also keeps your
+  # bug-ownership flags set each tick so they are never lost.
+  cheat_infinite_bugs: false
+
+  # Infinite Materials (Treasures)
+  # When enabled, the randomizer's "Start with All Treasures" setting is forced on,
+  # giving you 99 of every treasure/material from the start. The client also keeps
+  # your treasure-ownership flags set each tick so they are never lost.
+  cheat_infinite_materials: false
+
+  # Infinite Shield Durability
+  # When enabled, your equipped shield will never lose durability or break.
+  # (Shield durability counter is kept at max.)
+  cheat_infinite_shield: false
+
+  # Infinite Skyward Strike Time
+  # When enabled, the Skyward Strike charge timer never expires.
+  # Once charged, your sword stays charged indefinitely.
+  cheat_infinite_skyward_strike: false
+
+  # Infinite Rupees
+  # When enabled, your rupee counter is kept at the maximum for your wallet.
+  # You will always have enough rupees for any purchase.
+  cheat_infinite_rupees: false
+
+  # Moon Jump
+  # When enabled, pressing Y while airborne gives a large upward velocity boost.
+  # Hold Y to fly upward freely.
+  cheat_moon_jump: false
+
+  # Infinite Beetle Flying Time
+  # When enabled, the Beetle's flight timer is set to a very large value.
+  # The Beetle will fly indefinitely without returning automatically.
+  # NOTE: This patches game code
+  cheat_infinite_beetle: false
+
+  # Infinite Loftwing Charges
+  # When enabled, the Loftwing's spiral charge counter stays at 3.
+  # You can perform unlimited spiral charges while flying.
+  cheat_infinite_loftwing: false
+
+  # Speed Multiplier
+  # Multiplies Link's forward movement speed.
+  # 10 = normal (1.0x), 20 = double (2.0x), 30 = triple (3.0x), etc.
+  # Range: 10 to 50 (values above 30 may cause collision issues)
+  cheat_speed_multiplier: 10
 
 
 
@@ -60,6 +160,10 @@ Skyward Sword HD:
   # When you're done, there should be a config.yaml file in the randomizer folder. Copy its path into the field below and the settings will be imported from that file.
   # Example: C:\\Users\\awesome_user\\Downloads\\Skyward_Sword_HD_Randomizer_v2.2_windows\\config.yaml
   config_yaml_path: ""
+
+
+
+  # ====================================================================================
 
 
 

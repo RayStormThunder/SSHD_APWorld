@@ -70,17 +70,17 @@ LOCATION_FLAG_MAP = {
     "Batreaux's House - Seventh Reward": (FLAG_SCENE, 0x8, 0x08, "Skyloft"),
     "Batreaux's House - Final Reward": (FLAG_STORY, 0x0, 0x40, 0x805A9B00),  # Flag 360
 
-    # Beedle's Shop
-    "Beedle's Shop - 300 Rupee Item": (FLAG_STORY, 0x3, 0x01, 0x805A9B40),  # Flag 954
-    "Beedle's Shop - 600 Rupee Item": (FLAG_STORY, 0x3, 0x02, 0x805A9B40),  # Flag 955
-    "Beedle's Shop - 1200 Rupee Item": (FLAG_STORY, 0x3, 0x04, 0x805A9B40),  # Flag 956
-    "Beedle's Shop - 800 Rupee Item": (FLAG_STORY, 0x3, 0x08, 0x805A9B40),  # Flag 957
-    "Beedle's Shop - 1600 Rupee Item": (FLAG_STORY, 0x3, 0x10, 0x805A9B40),  # Flag 958
-    "Beedle's Shop - First 100 Rupee Item": (FLAG_STORY, 0xE, 0x80, 0x805A9B30),  # Flag 937
-    "Beedle's Shop - Second 100 Rupee Item": (FLAG_STORY, 0x1, 0x01, 0x805A9B40),  # Flag 938
-    "Beedle's Shop - Third 100 Rupee Item": (FLAG_STORY, 0x1, 0x02, 0x805A9B40),  # Flag 939
-    "Beedle's Shop - 50 Rupee Item": (FLAG_STORY, 0x1, 0x04, 0x805A9B40),  # Flag 940
-    "Beedle's Shop - 1000 Rupee Item": (FLAG_STORY, 0x1, 0x08, 0x805A9B40),  # Flag 941
+    # Beedle's Airshop
+    "Beedle's Airshop - 300 Rupee Item": (FLAG_STORY, 0x3, 0x01, 0x805A9B40),  # Flag 954
+    "Beedle's Airshop - 600 Rupee Item": (FLAG_STORY, 0x3, 0x02, 0x805A9B40),  # Flag 955
+    "Beedle's Airshop - 1200 Rupee Item": (FLAG_STORY, 0x3, 0x04, 0x805A9B40),  # Flag 956
+    "Beedle's Airshop - 800 Rupee Item": (FLAG_STORY, 0x3, 0x08, 0x805A9B40),  # Flag 957
+    "Beedle's Airshop - 1600 Rupee Item": (FLAG_STORY, 0x3, 0x10, 0x805A9B40),  # Flag 958
+    "Beedle's Airshop - First 100 Rupee Item": (FLAG_STORY, 0xE, 0x80, 0x805A9B30),  # Flag 937
+    "Beedle's Airshop - Second 100 Rupee Item": (FLAG_STORY, 0x1, 0x01, 0x805A9B40),  # Flag 938
+    "Beedle's Airshop - Third 100 Rupee Item": (FLAG_STORY, 0x1, 0x02, 0x805A9B40),  # Flag 939
+    "Beedle's Airshop - 50 Rupee Item": (FLAG_STORY, 0x1, 0x04, 0x805A9B40),  # Flag 940
+    "Beedle's Airshop - 1000 Rupee Item": (FLAG_STORY, 0x1, 0x08, 0x805A9B40),  # Flag 941
 
     # Sky
     "Sky - Lumpy Pumpkin - Chandelier": (FLAG_SCENE, 0x4, 0x80, "Sky"),

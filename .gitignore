@@ -10,9 +10,14 @@ __pycache__/
 build.log
 dist/
 build/
+release/
+logs/
+cache/
+*.exe
+SSHD_Archipelago_Release.zip
 sshd-rando-backend/asm/additions/rust-additions/target/
 
-# PyInstaller spec files
+# PyInstaller spec files (auto-generated)
 *.spec
 
 # Development/test files
@@ -43,6 +48,9 @@ decode_setting_string.py
 build_sshd_ap.bat
 find_hook_point.py
 scan_for_flags.py
+check_tpl_formats.py
+convert_png_to_tpl.py
+compare_files.py
 
 # Rando stuff
 Skyward Sword HD Randomizer/

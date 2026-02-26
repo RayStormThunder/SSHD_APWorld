@@ -246,6 +246,7 @@ def determine_check_patches(
                 shop_index = int(shop_match.group("index"))
                 stage = "F002r"  # Beedle's Airshop
                 layer = 0
+                room = 0  # Shops are always room 0
 
                 if shop_index < 20 or shop_index >= 30:
                     stage = "F004r"  # Bazaar

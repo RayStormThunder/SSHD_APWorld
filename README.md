@@ -13,45 +13,56 @@ This APWorld allows you to play Skyward Sword HD in a multiworld randomizer with
 - **Full Logic Support**: Ensures you always have items needed to progress
 - **40+ Options**: Customize starting items, logic difficulty, item placement
 - **Custom Logos**: Replace title screen with Archipelago branding
-- **Cross-Platform**: Works on Windows, Linux, and macOS (maybe, I don't have a mac nor do I use Linux)
+- **Cross-Platform**: NOT FULLY IMPLEMENTED YET ~~Works on Windows, Linux, and macOS (maybe, I don't have a mac nor do I use Linux)~~
 
 ## Download
 
-### Pre-built Release
-Download the latest `sshd.apworld`, `Skyward Sword HD.yaml`, `launch_sshd.bat` (if using Windows), and `launch_sshd_wrapper.py` files from the [Releases](https://github.com/LonLon-Labs/SSHD_APWorld/releases) page.
+### Pre-built Release (Recommended)
+Download the latest release zip from the [Releases](https://github.com/LonLon-Labs/SSHD_APWorld/releases) page. It includes:
+- `sshd.apworld` — the Archipelago world file
+- `ArchipelagoSSHDClient.exe` — standalone client (no Python needed)
+- `Skyward Sword HD.yaml` — template YAML for seed generation
+- `launch_sshd.bat` — optional convenience launcher (Windows)
 
 ### Build from Source
-```bash
-git clone https://github.com/LonLon-Labs/SSHD_APWorld.git
-cd sshd_apworld
-python build_apworld.py
-```
+See [Quick Start → Option B](#1-install-the-apworld-and-client) below.
 
 ## System Requirements
 - **Archipelago**: Version 0.5.0 or higher (Tested with 0.6.6)
-- **Python**: 3.10 or higher (Tested with Python 3.13.9)
 - **Emulator**: Ryujinx (Tested on 1.1.1376)
 - **Game**: The Legend of Zelda: Skyward Sword HD and Update Data (Switch)
 
+> **Note**: Python is **not** required for players using the pre-built release. Python is only needed if you are building from source.
+> If you are building from source, Python 3.10 or higher is required (Python 3.13.9 is recommended as that is what it was built with)
+
 ## Quick Start
 
-### 0. Install Python and dependencies
+### 1. Install the APWorld and Client
 
-- Install Python 3.10 or higher, 3.13.9 recommended (MAKE SURE TO ADD IT TO PATH)
-- Download and install the dependencies from [requirements.txt](requirements.txt) using either `pip install -r requirements.txt` or if that doesn't work `pip install --target="C:\ProgramData\Archipelago\lib" -r requirements.txt` (change the target path if necessary)
+**Option A: Pre-built Release (Recommended — no Python needed)**
 
-### 1. Install the APWorld and other files
+Download the latest release from the [Releases](https://github.com/LonLon-Labs/SSHD_APWorld/releases) page and:
+1. Place `sshd.apworld` in your Archipelago custom_worlds folder:
+   - **Windows**: `C:\ProgramData\Archipelago\custom_worlds\`
+   - **Linux**: `~/.local/share/Archipelago/custom_worlds/`
+   - **macOS**: `~/Library/Application Support/Archipelago/custom_worlds/`
+2. Place `ArchipelagoSSHDClient.exe` anywhere convenient (e.g. your Desktop or the Archipelago folder)
+3. Optionally place `launch_sshd.bat` anywhere (if you placed `ArchipelagoSSHDClient.exe` in the Arhcipelago folder)
 
-The APWorld will auto-deploy to the correct location for your OS (if building manually):
-- **Windows**: `C:\ProgramData\Archipelago\custom_worlds\`
-- **Linux**: `~/.local/share/Archipelago/custom_worlds/`
-- **macOS**: `~/Library/Application Support/Archipelago/custom_worlds/`
+That's it — no Python, no pip, no dependencies to install.
 
-Or manually place `sshd.apworld` in your platform's custom_worlds folder if running from the release.
-
-Place `launch_sshd_wrapper.py` in the Archipelago folder
-
-If using Windows: Place `launch_sshd.bat` in in the Archipelago folder (or somewhere else - it works from anywhere)
+**Option B: Build from Source (developers/contributors)**
+```bash
+git clone https://github.com/LonLon-Labs/SSHD_APWorld.git
+cd sshd_apworld
+pip install -r requirements.txt pyinstaller
+python build_release.py     # Builds both exe and apworld
+```
+Or to only build the apworld (requires Python + dependencies at runtime):
+```bash
+pip install -r requirements.txt
+python build_apworld.py
+```
 
 ### 2. Extract Your Game
 
@@ -67,9 +78,10 @@ You'll need a legally obtained copy of Skyward Sword HD for Nintendo Switch alon
 ### 3. Generate Your Seed
 
 1. Download the [Skyward Sword HD Randomizer](https://github.com/mint-choc-chip-skyblade/sshd-rando/releases/latest)
-2. Configure all of your options (don't generate)
+2. Configure all of your options (don't generate, that is handled by Archipelago)
 3. Open SkywardSwordHD.yaml for use as a template
-4. Use Method 1 and input the path to your `config.yaml` file (in the SSHD Rando folder)
+4. Use Method 1 and input the path to your `config.yaml` file (found in the SSHD Rando folder)
+5. Change other optional settings
 5. Put it in `C:\ProgramData\Archipelago\Players`
 6. Generate locally using all player yamls
     - Open the Archipelago Launcher and click 'Generate'
@@ -77,14 +89,14 @@ You'll need a legally obtained copy of Skyward Sword HD for Nintendo Switch alon
 
 #### From here you have 3 options
 1. Upload the outputed zip to [https://archipelago.randomstuff.cc](https://archipelago.randomstuff.cc) (the official website won't work due to a 64MB file upload limit)
-   - IF YOU USE THIS, THE WEBSOCKET URL IS NOT `archipelago.randomstuff.cc`, YOU NEED TO INPUT `ap.randomstuff.cc:PORT` INTO YOUR CLIENT
-2. Host locally (requires port forwarding or everyone being on the same LAN)
+   - IF YOU USE THIS, THE WEBSOCKET URL IS NOT `archipelago.randomstuff.cc`, YOU NEED TO INPUT `ap.randomstuff.cc:PORT` INTO YOUR CLIENT(S)
+2. Host locally (ADVANCED - requires port forwarding or everyone being on the same LAN)
 3. Unzip the outputed zip file and remove the patch file
    - Unzip the generated `.zip` file
    - Copy the `.apsshd` file to another spot
    - Delete it from the unziped folder and rezip
    - Now extract `.apsshd` and copy `romfs` and `exefs` to your Ryujinx mod directory (located at `C:\Users\Your_Username\AppData\Roaming\Ryujinx\sdcard\atmosphere\contents\01002da013484000\Archipelago` on Windows - you will need to create the `Archipelago` folder)
-   - You can now delete the patch file and upload the rezipped `.zip` file to [archipelago.gg](https://archipelago.gg)
+   - You can now delete the `.apsshd` file and upload the rezipped `.zip` file to [archipelago.gg](https://archipelago.gg)
 
 ### 4. Open Ryujinx
 Make sure the mod and 1.0.1 update are enabled and open Skyward Sword HD
@@ -94,9 +106,14 @@ You should see the custom Archipelago logo - that means it's working
 Get into the game far enough to where you can move Link
 
 ### 4. Launch the Client
-Double click `launch_sshd.bat` if on Windows or run `python launch_sshd_wrapper.py` if on Linux/macOS
+Double-click `ArchipelagoSSHDClient.exe` (or `launch_sshd.bat`)
+
+If you don't have the exe, you can fall back to `python launch_sshd_wrapper.py`
 
 ### 5. Play!
+> **Note**: WAIT UNTIL YOU SEE `Found SSHD base address` IN THE CLIENT BEFORE PICKING ANYTHING UP
+> NOT DOING SO COULD POSSIBLY BREAK IT AND NOT SEND THE ITEM OVER
+
 Items you find are automatically sent to other players and vice-versa!
 
 ## Contributing
@@ -120,6 +137,10 @@ This project is licensed under the AGPL License - see the [LICENSE](LICENSE) for
 - **Archipelago Team**: For the amazing multiworld randomizer framework
 - **SSHD Randomizer Team**: For the original SSHD randomizer logic and the very helpful cheat table
 - **Contributors**: Everyone who has helped improve this project
+
+## Beta Testers
+
+- [PokeTrainer](https://github.com/Poke14)
 
 ## Support
 

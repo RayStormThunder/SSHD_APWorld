@@ -10,21 +10,61 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  # ── Build standalone Windows client exe ──────────────────────────
+  build-exe:
+    runs-on: windows-latest
 
-    permissions:
-      contents: write
-    
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-    
+
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.12'
-    
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+
+    - name: Build standalone client exe
+      run: python build_client_exe.py
+
+    - name: Verify exe exists
+      run: |
+        if (!(Test-Path "dist\ArchipelagoSSHDClient\ArchipelagoSSHDClient.exe")) {
+          Write-Error "ArchipelagoSSHDClient.exe not found after build"
+          exit 1
+        }
+        $size = (Get-Item "dist\ArchipelagoSSHDClient\ArchipelagoSSHDClient.exe").Length / 1MB
+        Write-Output "✅ ArchipelagoSSHDClient.exe built ($([math]::Round($size,1)) MB)"
+
+    - name: Zip client folder
+      run: Compress-Archive -Path "dist\ArchipelagoSSHDClient\*" -DestinationPath "ArchipelagoSSHDClient.zip" -Force
+
+    - name: Upload client artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: sshd-client
+        path: ArchipelagoSSHDClient.zip
+        retention-days: 90
+
+  # ── Build the .apworld (with exe bundled) ────────────────────────
+  build-apworld:
+    runs-on: ubuntu-latest
+    needs: build-exe
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
     - name: Install system dependencies
       run: |
         sudo apt-get update
@@ -34,21 +74,27 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-    
+
+    - name: Download client zip (not bundled in apworld, distributed separately)
+      uses: actions/download-artifact@v4
+      with:
+        name: sshd-client
+        path: .
+
     - name: Build APWorld
       run: |
         python build_apworld.py
-    
+
     - name: Verify APWorld structure
       run: |
         echo "Verifying sshd.apworld structure..."
-        python -m zipfile -l sshd.apworld | head -20
-        
+        python -m zipfile -l sshd.apworld | head -30
+
         # Check if key files exist in the archive
         python -c "
         import zipfile
         import sys
-        
+
         required_files = [
             'sshd/__init__.py',
             'sshd/Items.py',
@@ -57,11 +103,11 @@ jobs:
             'sshd/Rules.py',
             'sshd/archipelago.json'
         ]
-        
+
         with zipfile.ZipFile('sshd.apworld', 'r') as zf:
             archive_files = zf.namelist()
             missing = [f for f in required_files if f not in archive_files]
-            
+
             if missing:
                 print('❌ Missing required files:')
                 for f in missing:
@@ -69,19 +115,51 @@ jobs:
                 sys.exit(1)
             else:
                 print('✅ All required files present in APWorld')
+
+            # Check if exe is bundled
+            if 'sshd/ArchipelagoSSHDClient.exe' in archive_files:
+                print('✅ Standalone client exe bundled in APWorld')
+            else:
+                print('⚠️  Standalone client exe NOT in APWorld (will be distributed separately)')
         "
-    
+
     - name: Upload APWorld artifact
       uses: actions/upload-artifact@v4
       with:
         name: sshd-apworld
-        path:  |
-          sshd.apworld
-          launch_sshd.bat
-          launch_sshd_wrapper.py
-          SkywardSwordHD.yaml
+        path: sshd.apworld
         retention-days: 90
-    
+
+  # ── Create release package ───────────────────────────────────────
+  release:
+    runs-on: ubuntu-latest
+    needs: [build-exe, build-apworld]
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')
+
+    permissions:
+      contents: write
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: Prepare release files
+      run: |
+        mkdir -p release
+        cp artifacts/sshd-apworld/sshd.apworld release/
+        cp artifacts/sshd-client/ArchipelagoSSHDClient.zip release/
+        cp launch_sshd.bat release/
+        cp launch_sshd_wrapper.py release/
+        cp SkywardSwordHD.yaml "release/Skyward Sword HD.yaml"
+
+        echo "Release contents:"
+        ls -lh release/
+
     - name: Update Continuous Release
       if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
       uses: softprops/action-gh-release@v1
@@ -89,19 +167,49 @@ jobs:
         tag_name: Continuous
         name: Continuous Build
         files: |
-          sshd.apworld
-          launch_sshd.bat
-          launch_sshd_wrapper.py
-          SkywardSwordHD.yaml
+          release/sshd.apworld
+          release/ArchipelagoSSHDClient.zip
+          release/launch_sshd.bat
+          release/launch_sshd_wrapper.py
+          release/Skyward Sword HD.yaml
         body: |
           **Automated build from latest commit**
-          
+
           This is an automatically generated build from the latest code.
           For stable releases, see the [Releases](https://github.com/${{ github.repository }}/releases) page.
-          
+
+          **No Python installation required!** Download `sshd.apworld` and `ArchipelagoSSHDClient.zip`.
+
+          ### Quick Install
+          1. Place `sshd.apworld` in your Archipelago `custom_worlds` folder
+          2. Extract `ArchipelagoSSHDClient.zip` and run `ArchipelagoSSHDClient.exe`
+
           **Commit**: ${{ github.sha }}
           **Branch**: ${{ github.ref_name }}
         draft: false
         prerelease: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Create Tagged Release
+      if: startsWith(github.ref, 'refs/tags/v')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          release/sshd.apworld
+          release/ArchipelagoSSHDClient.zip
+          release/launch_sshd.bat
+          release/launch_sshd_wrapper.py
+          release/Skyward Sword HD.yaml
+        body: |
+          ## SSHD Archipelago ${{ github.ref_name }}
+
+          ### Quick Install (no Python needed!)
+          1. Place `sshd.apworld` in your Archipelago `custom_worlds` folder
+          2. Extract `ArchipelagoSSHDClient.zip` and run `ArchipelagoSSHDClient.exe`
+
+          See [README](https://github.com/${{ github.repository }}#quick-start) for full setup instructions.
+        draft: false
+        prerelease: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

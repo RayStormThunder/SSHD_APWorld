@@ -917,7 +917,7 @@ class SSHDContext(CommonContext):
             logging_pairs = [
                 ("Client", "Archipelago"),
             ]
-            base_title = "Archipelago Skyward Sword HD Client"
+            base_title = "Archipelago Skyward Sword HD Client Version"
         
         self.ui = SSHDManager(self)
         self.ui_task = asyncio.create_task(self.ui.async_run(), name="UI")

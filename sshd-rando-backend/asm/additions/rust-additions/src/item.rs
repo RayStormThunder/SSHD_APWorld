@@ -1346,6 +1346,11 @@ pub extern "C" fn resolve_progressive_item_models(
         }
 
         match item_id {
+            // Progressive Sword - always use Practice Sword model
+            // (can't know which tier the player will get next)
+            10 => {
+                return c"GetSwordA".as_ptr();
+            },
             // Progressive Bow
             19 => {
                 if flag::check_itemflag(flag::ITEMFLAGS::BOW) == 0 {
@@ -1413,8 +1418,12 @@ pub extern "C" fn resolve_progressive_item_models(
 // Helper function to get fallback models for items without defined models.
 // Uses GetRupee because it's in the ObjectPack and always available in every
 // stage.
-fn get_fallback_model_for_item(_item_id: u16) -> *const c_char {
-    c"GetRupee".as_ptr()
+fn get_fallback_model_for_item(item_id: u16) -> *const c_char {
+    match item_id {
+        // Progressive Sword - always use Practice Sword model
+        10 => c"GetSwordA".as_ptr(),
+        _ => c"GetRupee".as_ptr(),
+    }
 }
 
 #[no_mangle]

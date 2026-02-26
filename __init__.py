@@ -30,7 +30,6 @@ from worlds.AutoWorld import WebWorld, World
 from worlds.Files import APPlayerContainer
 from worlds.LauncherComponents import (
     Component,
-    SuffixIdentifier,
     Type,
     components,
     launch_subprocess,
@@ -179,7 +178,6 @@ components.append(
         "Skyward Sword HD Client",
         func=run_client,
         component_type=Type.CLIENT,
-        file_identifier=SuffixIdentifier(".apsshd"),
         icon="Skyward Sword HD"
     )
 )
@@ -614,6 +612,66 @@ class SSHDWorld(World):
         # We just need to ensure all locations from LOCATION_TABLE are created.
         pass
     
+    def _get_excluded_item_types(self) -> set:
+        """
+        Determine which location types' ITEMS should be excluded from the
+        AP item pool based on shuffle settings. When a shuffle is off, items
+        from those locations are replaced with filler, but the locations
+        themselves still exist in the AP world (any item can be placed there).
+        """
+        # Use resolved sshd-rando settings if available, else fall back to AP options
+        s = getattr(self, '_sshd_resolved_settings', {})
+        excluded: set = set()
+
+        # Simple on/off toggles
+        _TOGGLE_MAP = {
+            "Tadtones":              "tadtone_shuffle",
+            "Gratitude Crystals":    "gratitude_crystal_shuffle",
+            "Stamina Fruits":        "stamina_fruit_shuffle",
+            "Hidden Items":          "hidden_item_shuffle",
+            "Goddess Chests":        "goddess_chest_shuffle",
+            "Gossip Stone Treasures": "gossip_stone_treasure_shuffle",
+            "Underground Rupees":    "underground_rupee_shuffle",
+        }
+        for loc_type, setting_key in _TOGGLE_MAP.items():
+            if s:
+                val = s.get(setting_key, "off")
+                if val not in ("on", "randomized"):
+                    excluded.add(loc_type)
+            else:
+                opt = getattr(self.options, setting_key, None)
+                if opt is not None and not opt.value:
+                    excluded.add(loc_type)
+
+        # NPC Closet shuffle
+        if s:
+            if s.get("npc_closet_shuffle", "vanilla") == "vanilla":
+                excluded.add("Closets")
+        else:
+            if not self.options.npc_closet_shuffle.value:
+                excluded.add("Closets")
+
+        # Rupee shuffle (tiered)
+        if s:
+            rupee_val = s.get("rupee_shuffle", "vanilla")
+        else:
+            rupee_map = {0: "vanilla", 1: "beginner", 2: "intermediate", 3: "advanced"}
+            rupee_val = rupee_map.get(self.options.rupee_shuffle.value, "vanilla")
+
+        if rupee_val == "vanilla":
+            excluded.update(["Beginner Rupees", "Intermediate Rupees", "Advanced Rupees"])
+        elif rupee_val == "beginner":
+            excluded.update(["Intermediate Rupees", "Advanced Rupees"])
+        elif rupee_val == "intermediate":
+            excluded.add("Advanced Rupees")
+
+        # Goddess Cubes are dummy logic items (oarc: null) used internally by
+        # sshd-rando to link cube-strike locations to sky Goddess Chests.
+        # They have no in-game model and must never be in the AP pool.
+        excluded.add("Goddess Cube")
+
+        return excluded
+
     def _create_basic_regions(self) -> None:
         """Fallback: create basic regions from Regions.py (old behavior)."""
         from .Regions import REGION_CONNECTIONS
@@ -630,9 +688,20 @@ class SSHDWorld(World):
             self.multiworld.regions.append(region)
             regions_dict[region_name] = region
         
-        # Add all locations to their respective regions
+        # Add locations to their respective regions
+        # Goddess Cubes are always excluded (internal logic, no in-game model).
+        # Goddess Chests are excluded unless goddess_chest_shuffle is on.
+        # All other locations exist regardless of shuffle settings.
+        s = getattr(self, '_sshd_resolved_settings', {})
+        goddess_chests_on = s.get("goddess_chest_shuffle", "off") in ("on", "randomized") if s else bool(getattr(self.options, 'goddess_chest_shuffle', None) and self.options.goddess_chest_shuffle.value)
         for name, data in LOCATION_TABLE.items():
             if data.code is not None:
+                # Always skip Goddess Cubes (dummy internal logic items)
+                if any(t == "Goddess Cube" for t in data.types):
+                    continue
+                # Skip Goddess Chests unless goddess_chest_shuffle is on
+                if not goddess_chests_on and any(t == "Goddess Chests" for t in data.types):
+                    continue
                 region = regions_dict.get(data.region)
                 if region:
                     location = Location(
@@ -705,14 +774,58 @@ class SSHDWorld(World):
                 from collections import Counter
                 sshd_item_pool = Counter()  # item_name -> count
                 
+                # ── Compute excluded location types from sshd-rando settings ──
+                # When a shuffle is off, those locations stay vanilla in-game
+                # and must not contribute items to Archipelago's randomized pool.
+                excluded_loc_types: set[str] = set()
+                if hasattr(world, 'setting_map') and world.setting_map:
+                    sm = world.setting_map.settings
+                    _toggle_map = {
+                        "Tadtones":              "tadtone_shuffle",
+                        "Gratitude Crystals":    "gratitude_crystal_shuffle",
+                        "Stamina Fruits":        "stamina_fruit_shuffle",
+                        "Hidden Items":          "hidden_item_shuffle",
+                        "Goddess Chests":        "goddess_chest_shuffle",
+                        "Gossip Stone Treasures": "gossip_stone_treasure_shuffle",
+                        "Underground Rupees":    "underground_rupee_shuffle",
+                    }
+                    for loc_type, skey in _toggle_map.items():
+                        if skey in sm and sm[skey].value not in ("on", "randomized"):
+                            excluded_loc_types.add(loc_type)
+                    if "npc_closet_shuffle" in sm and sm["npc_closet_shuffle"].value == "vanilla":
+                        excluded_loc_types.add("Closets")
+                    rupee_setting = sm.get("rupee_shuffle", None)
+                    rupee_str = rupee_setting.value if rupee_setting else "vanilla"
+                    if rupee_str == "vanilla":
+                        excluded_loc_types.update(["Beginner Rupees", "Intermediate Rupees", "Advanced Rupees"])
+                    elif rupee_str == "beginner":
+                        excluded_loc_types.update(["Intermediate Rupees", "Advanced Rupees"])
+                    elif rupee_str == "intermediate":
+                        excluded_loc_types.add("Advanced Rupees")
+
+                # Goddess Cubes are dummy logic items (oarc: null) — always exclude
+                excluded_loc_types.add("Goddess Cube")
+                
+                if excluded_loc_types:
+                    print(f"[__init__.py] Excluding location types from item pool: {sorted(excluded_loc_types)}")
+                
                 # Scan all filled locations to reconstruct the placed item pool
+                locations_excluded = 0
                 if hasattr(world, 'location_table'):
                     for loc_name, location in world.location_table.items():
                         if hasattr(location, 'types') and "Hint Location" in location.types:
                             continue  # Skip gossip stones
+                        # Skip locations for non-shuffled types
+                        if excluded_loc_types and hasattr(location, 'types'):
+                            if any(t in excluded_loc_types for t in location.types):
+                                locations_excluded += 1
+                                continue
                         if hasattr(location, 'current_item') and location.current_item:
                             item_name = location.current_item.name
                             sshd_item_pool[item_name] += 1
+                
+                if locations_excluded > 0:
+                    print(f"[__init__.py] Skipped {locations_excluded} non-shuffled locations from item pool")
                 
                 # Also count starting items (they were removed from pool during generation)
                 sshd_starting_pool = Counter()
@@ -873,6 +986,11 @@ class SSHDWorld(World):
             "Archipelago Item",   # Cross-world placeholder, not in our pool
             "Sailcloth",          # Always given as a starting item, never randomized
         }
+
+        # Goddess Cube items are dummy logic items with no in-game model (oarc: null).
+        # They exist in sshd-rando to link cube-strike locations → sky Goddess Chests
+        # but must never appear as real items in the AP pool.
+        SKIP_GODDESS_CUBES = {name for name in ITEM_TABLE if "Goddess Cube" in name}
         
         # --- FORCE SAILCLOTH AS STARTING ITEM ---
         # Sailcloth is always given to the player unconditionally.
@@ -927,6 +1045,11 @@ class SSHDWorld(World):
                 ap_name = STAGE_TO_PROGRESSIVE.get(item_name, item_name)
                 ap_pool_counts[ap_name] += count
             
+            # Cap Green Rupee and Tumbleweed to exactly 1 each
+            for cap_item in ["Green Rupee", "Tumbleweed"]:
+                if ap_pool_counts.get(cap_item, 0) > 1:
+                    ap_pool_counts[cap_item] = 1
+            
             # Add all placed items directly to the AP pool.
             # No subtraction needed — sshd-rando already removed starting items
             # from item_pool before fill_worlds() ran, so items at locations
@@ -937,7 +1060,7 @@ class SSHDWorld(World):
                     continue
                 
                 # Skip non-pool items
-                if ap_name in SKIP_ITEMS:
+                if ap_name in SKIP_ITEMS or ap_name in SKIP_GODDESS_CUBES:
                     continue
                 
                 for _ in range(count):
@@ -951,6 +1074,15 @@ class SSHDWorld(World):
             # --- FALLBACK: hardcoded STANDARD pool ---
             # Used only if sshd-rando world extraction failed
             print(f"[__init__.py] WARNING: No sshd-rando pool available, using hardcoded STANDARD fallback")
+            
+            # Determine excluded types to filter shuffle-dependent items
+            excluded_types = self._get_excluded_item_types()
+            
+            # Map items to the location type they belong to (so we can exclude them)
+            _ITEM_TO_LOC_TYPE = {
+                "Group of Tadtones": "Tadtones",
+                "Gratitude Crystal": "Gratitude Crystals",
+            }
             
             POOL_ITEM_COUNTS = {
                 "Progressive Sword": 6,
@@ -991,6 +1123,7 @@ class SSHDWorld(World):
                 "Goddess Plume": 1,
                 "Dusk Relic": 1,
                 "Tumbleweed": 1,
+                "Green Rupee": 1,
                 "5 Bombs": 1,
             }
             
@@ -998,6 +1131,13 @@ class SSHDWorld(World):
                 if name in SKIP_ITEMS or name in PROGRESSIVE_STAGE_ITEMS:
                     continue
                 if data.classification == IC.trap:
+                    continue
+                # Skip items whose shuffle is off
+                item_loc_type = _ITEM_TO_LOC_TYPE.get(name)
+                if item_loc_type and item_loc_type in excluded_types:
+                    continue
+                # Skip Goddess Cube dummy items
+                if "Goddess Cube" in name:
                     continue
                 
                 if name in POOL_ITEM_COUNTS:
@@ -1013,7 +1153,7 @@ class SSHDWorld(World):
         
         # Fill remaining slots with junk filler items
         JUNK_FILL_ITEMS = [
-            "Green Rupee", "Blue Rupee", "Red Rupee",
+            "Blue Rupee", "Red Rupee",
             "10 Arrows", "5 Bombs", "10 Bombs",
             "5 Deku Seeds", "10 Deku Seeds",
         ]
@@ -1345,17 +1485,21 @@ class SSHDWorld(World):
                 sshd_custom_flag_names = extract_custom_flag_mapping(world)
                 
                 # Convert location names to location codes for the client
+                # All real locations exist in the AP world (only Goddess Cubes excluded)
                 self._actual_custom_flag_mapping = {}
+                skipped_internal = 0
                 for custom_flag_id, location_name in sshd_custom_flag_names.items():
                     try:
                         location = self.multiworld.get_location(location_name, self.player)
                         if location and location.address is not None:
                             self._actual_custom_flag_mapping[custom_flag_id] = location.address
                     except Exception as e:
-                        print(f"[__init__.py] Warning: Could not find location '{location_name}': {e}")
+                        # Only Goddess Cube locations should be missing
+                        skipped_internal += 1
                 
                 print(f"[__init__.py] Stored {len(self._actual_custom_flag_mapping)} custom flag assignments for client")
-                print(f"[__init__.py] Note: Only locations with custom flags in sshd-rando will be monitored")
+                if skipped_internal:
+                    print(f"[__init__.py] Skipped {skipped_internal} internal locations (Goddess Cubes)")
                 
                 # Verify files were created
                 exefs_out = actual_output_dir / "exefs"
@@ -1734,9 +1878,27 @@ class SSHDWorld(World):
         settings_dict["start_with_all_treasures"] = "on" if self.options.start_with_all_treasures.value else "off"
         
         # Difficulty
-        damage_map = {0: "half", 1: "normal", 2: "double", 3: "quadruple", 4: "ohko", 5: "invincible"}
+        # damage_multiplier is a raw integer (0=invincible, 1=normal, 2=double, 4=quadruple, 80=OHKO)
+        damage_map = {0: "0", 1: "1", 2: "2", 3: "4", 4: "80"}
         settings_dict["damage_multiplier"] = damage_map[self.options.damage_multiplier.value]
         settings_dict["spawn_hearts"] = "on"
+
+        # === Cheat overrides ===
+        # Infinite Health: force damage_multiplier to 0 (invincible)
+        # The client also writes max health each tick as a safety net.
+        if getattr(self.options, "cheat_infinite_health", None) and self.options.cheat_infinite_health.value:
+            settings_dict["damage_multiplier"] = "0"
+            print("[Cheats] Infinite Health enabled - damage_multiplier forced to 0 (invincible)")
+
+        # Infinite Bugs: force start_with_all_bugs on (gives 99 at generation)
+        if getattr(self.options, "cheat_infinite_bugs", None) and self.options.cheat_infinite_bugs.value:
+            settings_dict["start_with_all_bugs"] = "on"
+            print("[Cheats] Infinite Bugs enabled - start_with_all_bugs forced to 'on'")
+
+        # Infinite Materials: force start_with_all_treasures on (gives 99 at generation)
+        if getattr(self.options, "cheat_infinite_materials", None) and self.options.cheat_infinite_materials.value:
+            settings_dict["start_with_all_treasures"] = "on"
+            print("[Cheats] Infinite Materials enabled - start_with_all_treasures forced to 'on'")
 
         # Starting Inventory
         settings_dict["starting_tablets"] = self.options.starting_tablets.value

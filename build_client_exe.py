@@ -16,6 +16,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+# On headless CI runners (no GPU), Kivy's default OpenGL backend fails because
+# only OpenGL 1.1 (GDI Generic) is available.  Force the ANGLE backend which
+# ships with kivy_deps.angle and provides a software OpenGL ES context that
+# satisfies Kivy's minimum requirement (OpenGL 2.0).
+os.environ.setdefault("KIVY_GL_BACKEND", "angle_sdl2")
+
 
 def build_client_exe():
     """Build the standalone SSHD Archipelago Client executable."""

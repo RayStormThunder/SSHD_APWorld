@@ -9,7 +9,7 @@
   standard: "You found <y<<string arg0> >> for <b<<string arg1> >>!"
 
 - name: Archipelago Item Get Text Page 2
-  standard: "It should show up in their game after closing this\n textbox!"
+  standard: "It should show up in their game after closing this\ntextbox!"
 
 - name: Some Tadtones Collected text
   standard: "You got a group of <y<Tadtones>>!\nOnly <r<<numeric arg0> >> left to find!"

@@ -236,10 +236,10 @@ pub extern "C" fn give_item_with_archipelago_flag(itemid: u8, custom_flag: u16) 
         // Spawn item with param1 for display, param2 for custom flag
         let param1: u32 = (new_itemid as u32) | 0x180000; // Standard item spawn flags
 
-        // Set ACTORBASE_PARAM2 BEFORE spawning so it gets picked up by actor init
-        // This is critical - param2 must be set before dAcItem::Init runs
-        ACTORBASE_PARAM2 = param2;
-
+        // Pass param2 directly to spawn_actor so it gets set atomically
+        // via ACTORBASE_PARAM2 within spawn_actor itself.
+        // Previously we set ACTORBASE_PARAM2 before calling spawn_actor,
+        // but spawn_actor overwrites ACTORBASE_PARAM2 with its parameter.
         let item_actor: *mut dAcItem = actor::spawn_actor(
             actor::ACTORID::ITEM,
             (*ROOM_MGR).roomid.into(),
@@ -247,22 +247,13 @@ pub extern "C" fn give_item_with_archipelago_flag(itemid: u8, custom_flag: u16) 
             core::ptr::null_mut(),
             core::ptr::null_mut(),
             core::ptr::null_mut(),
-            0xFFFFFFFF,
+            param2,
         ) as *mut dAcItem;
-
-        // Reset ACTORBASE_PARAM2 to prevent it affecting subsequent spawns
-        ACTORBASE_PARAM2 = 0xFFFFFFFF;
 
         if item_actor.is_null() {
             ITEM_GET_BOTTLE_POUCH_SLOT = 0xFFFFFFFF;
             NUMBER_OF_ITEMS = 0;
             return item_actor;
-        }
-
-        // Verify param2 was actually set - if not, set it manually
-        // This handles cases where ACTORBASE_PARAM2 mechanism didn't work
-        if (*item_actor).base.members.base.param2 != param2 {
-            (*item_actor).base.members.base.param2 = param2;
         }
 
         ITEM_GET_BOTTLE_POUCH_SLOT = 0xFFFFFFFF;

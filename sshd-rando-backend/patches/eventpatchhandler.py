@@ -203,9 +203,10 @@ class EventPatchHandler:
 
                                 parsed_msbf["FLW3"]["flow"][eventid]["param2"] = itemid
 
-                                # Inject set_global_sceneflag flow node after giveitem (for Archipelago multiworld detection)
+                                # Inject set_global_flag flow node after giveitem (for Archipelago multiworld detection)
                                 # Uses CUSTOM event command 80 (subType=0, param3=80) which calls
-                                # flag::set_global_sceneflag() in Rust to write directly to FA.sceneflags[]
+                                # flag::set_global_sceneflag() or flag::set_global_dungeonflag() in Rust
+                                # based on the flag_space_trigger parameter (param4).
                                 # The vanilla setsceneflag command (param3=2) only sets LOCAL scene flags
                                 # which don't work for arbitrary scenes 6/13/16/19
                                 if custom_flag != 0x3FF:
@@ -213,20 +214,22 @@ class EventPatchHandler:
                                     scene_selector = (custom_flag >> 7) & 0x3
                                     actual_scene_index = CUSTOM_FLAG_SCENES[scene_selector]
                                     flag_index = custom_flag & 0x7F
+                                    flag_space_trigger = (custom_flag >> 9) & 0x1
                                     
                                     # Get where the giveitem was going to chain to
                                     original_next_index = parsed_msbf["FLW3"]["flow"][eventid].get("next", -1)
                                     
-                                    # Create flow node using custom event command 80 (set_global_sceneflag)
+                                    # Create flow node using custom event command 80 (set_global_flag)
                                     # subType=0 routes through the custom event command handler in event.rs
-                                    # param3=80 dispatches to our set_global_sceneflag command
+                                    # param3=80 dispatches to our set_global_flag command
+                                    # param4=flag_space_trigger (0=sceneflag, 1=dungeonflag)
                                     setflag_flow = {
                                         "type": "type3",
                                         "subType": 0,
                                         "param1": flag_index,          # flag index (0-127)
                                         "param2": actual_scene_index,  # actual scene index (6, 13, 16, or 19)
-                                        "param3": 80,                  # custom command: set_global_sceneflag
-                                        "param4": 0,
+                                        "param3": 80,                  # custom command: set_global_flag
+                                        "param4": flag_space_trigger,  # 0=sceneflag, 1=dungeonflag
                                         "param5": 0,
                                         "next": original_next_index,
                                     }
@@ -236,7 +239,7 @@ class EventPatchHandler:
                                     parsed_msbf["FLW3"]["flow"].append(setflag_flow)
                                     parsed_msbf["FLW3"]["flow"][eventid]["next"] = new_flow_index
                                     
-                                    print(f"[EventPatch] Injected set_global_sceneflag(cmd80) for event {eventid}: scene={actual_scene_index}, flag={flag_index} (flow {new_flow_index} -> {original_next_index})")
+                                    print(f"[EventPatch] Injected set_global_flag(cmd80) for event {eventid}: scene={actual_scene_index}, flag={flag_index}, flag_space={flag_space_trigger} (flow {new_flow_index} -> {original_next_index})")
 
                         if msbf_file_name == "003-ItemGet.msbf":
                             handle_progressive_items(parsed_msbf)

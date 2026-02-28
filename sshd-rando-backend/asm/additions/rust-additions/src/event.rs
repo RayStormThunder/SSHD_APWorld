@@ -186,8 +186,9 @@ pub extern "C" fn custom_event_commands(
             let custom_flag = event_flow_element.param4 as u8;
             give_item_with_sceneflag(itemid, custom_flag);
         },
-        // Set global sceneflag for Archipelago custom flag detection
+        // Set global flag for Archipelago custom flag detection
         // param1 = flag index (0-127), param2 = actual scene index (6, 13, 16, or 19)
+        // param4 = flag_space_trigger (0 = sceneflag, 1 = dungeonflag)
         //
         // IMPORTANT: The body is in a separate #[inline(never)] function to keep
         // register pressure low in this function. The asm epilogue below sets w21
@@ -214,11 +215,15 @@ pub extern "C" fn custom_event_commands(
     }
 }
 
-/// Set global sceneflag for Archipelago custom flag detection.
+/// Set global flag for Archipelago custom flag detection.
 ///
-/// Encodes the flag index and scene index into a compact 10-bit ID and stores
-/// it in `LAST_AP_ITEM_FLAG_ID` so the textbox can look up the correct AP item
-/// info.
+/// Encodes the flag index, scene index, and flag space into a compact 10-bit
+/// ID and stores it in `LAST_AP_ITEM_FLAG_ID` so the textbox can look up the
+/// correct AP item info.
+///
+/// param1 = flag index (0-127)
+/// param2 = actual scene index (6, 13, 16, or 19)
+/// param4 = flag_space_trigger (0 = sceneflag, 1 = dungeonflag)
 ///
 /// # Why this is a separate function
 /// Same reasoning as `set_ap_item_string_args` – keeps register pressure in
@@ -228,7 +233,14 @@ fn set_global_sceneflag_for_ap(event_flow_element: &EventFlowElement) {
     unsafe {
         let flag_index = event_flow_element.param1 as u16;
         let scene_index = event_flow_element.param2 as u16;
-        flag::set_global_sceneflag(scene_index, flag_index);
+        let flag_space_trigger = event_flow_element.param4 as u32;
+
+        // Use different flag spaces depending on the value of flag_space_trigger
+        match flag_space_trigger {
+            0 => flag::set_global_sceneflag(scene_index, flag_index),
+            1 => flag::set_global_dungeonflag(scene_index, flag_index),
+            _ => flag::set_global_sceneflag(scene_index, flag_index),
+        }
 
         let scene_raw: u32 = match scene_index {
             6 => 0,
@@ -237,7 +249,8 @@ fn set_global_sceneflag_for_ap(event_flow_element: &EventFlowElement) {
             19 => 3,
             _ => 0,
         };
-        let computed_flag_id = (flag_index as u32 & 0x7F) | (scene_raw << 7);
+        let computed_flag_id =
+            (flag_index as u32 & 0x7F) | (scene_raw << 7) | (flag_space_trigger << 9);
         item::LAST_AP_ITEM_FLAG_ID = computed_flag_id as u16;
     }
 }

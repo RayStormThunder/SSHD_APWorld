@@ -1532,6 +1532,32 @@ class SSHDWorld(World):
                 if skipped_internal:
                     print(f"[__init__.py] Skipped {skipped_internal} internal locations (Goddess Cubes)")
                 
+                # VERIFICATION: Compare intended vs actual custom flag assignments
+                # This detects mismatches that would cause AP item text to fail
+                if hasattr(self, '_custom_flag_mapping') and self._actual_custom_flag_mapping:
+                    intended = self._custom_flag_mapping  # flag_id -> location_code
+                    actual_reverse = {loc_code: flag_id for flag_id, loc_code in self._actual_custom_flag_mapping.items()}
+                    intended_reverse = {loc_code: flag_id for flag_id, loc_code in intended.items()}
+                    
+                    mismatches = 0
+                    missing_from_rom = 0
+                    for loc_code, intended_flag in intended_reverse.items():
+                        if loc_code in actual_reverse:
+                            actual_flag = actual_reverse[loc_code]
+                            if intended_flag != actual_flag:
+                                mismatches += 1
+                                if mismatches <= 10:
+                                    print(f"[__init__.py] ⚠ FLAG MISMATCH: location {loc_code} intended flag={intended_flag} but ROM has flag={actual_flag}")
+                        else:
+                            missing_from_rom += 1
+                    
+                    if mismatches == 0 and missing_from_rom <= 50:  # Goddess Cubes are expected missing
+                        print(f"[__init__.py] ✓ Custom flag verification passed ({len(intended)} intended, {len(self._actual_custom_flag_mapping)} in ROM, {missing_from_rom} not in ROM)")
+                    else:
+                        print(f"[__init__.py] ⚠ Custom flag issues: {mismatches} mismatches, {missing_from_rom} missing from ROM")
+                        if mismatches > 0:
+                            print(f"[__init__.py] ⚠ AP item text may show fallback for {mismatches} locations!")
+                
                 # Verify files were created
                 exefs_out = actual_output_dir / "exefs"
                 if exefs_out.exists():

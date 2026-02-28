@@ -155,7 +155,7 @@ jobs:
         cp artifacts/sshd-client/ArchipelagoSSHDClient.zip release/
         cp launch_sshd.bat release/
         cp launch_sshd_wrapper.py release/
-        cp SkywardSwordHD.yaml "release/Skyward Sword HD.yaml"
+        cp SkywardSwordHD.yaml "release/SkywardSwordHD.yaml"
 
         echo "Release contents:"
         ls -lh release/
@@ -171,7 +171,7 @@ jobs:
           release/ArchipelagoSSHDClient.zip
           release/launch_sshd.bat
           release/launch_sshd_wrapper.py
-          release/Skyward Sword HD.yaml
+          release/SkywardSwordHD.yaml
         body: |
           **Automated build from latest commit**
 
@@ -200,7 +200,7 @@ jobs:
           release/ArchipelagoSSHDClient.zip
           release/launch_sshd.bat
           release/launch_sshd_wrapper.py
-          release/Skyward Sword HD.yaml
+          release/SkywardSwordHD.yaml
         body: |
           ## SSHD Archipelago ${{ github.ref_name }}
 

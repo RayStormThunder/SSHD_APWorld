@@ -696,14 +696,18 @@ class RyujinxMemoryReader:
             # Targeted scan for Rust static buffer magic signatures.
             #
             # These buffers live in the game's address space (subsdk8 .bss/.data)
-            # which is within ~1 GB of the base address.  Scanning only this
-            # small range instead of the entire process is dramatically faster.
+            # which is within a few GB of the base address.  Scanning a
+            # bounded range instead of the entire process is dramatically faster.
+            #
+            # We scan both above and below the base because the subsdk8 module
+            # may be loaded at a lower virtual address than the main binary.
             # ----------------------------------------------------------------
             magic_hits: Dict[str, list] = {name: [] for name in self.PRESCAN_MAGIC}
             MAX_MAGIC_HITS = 16
 
-            magic_scan_start = best_base
-            magic_scan_end = best_base + 0x40000000  # 1 GB above base
+            PRESCAN_RANGE = 0x80000000  # 2 GB in each direction
+            magic_scan_start = max(best_base - PRESCAN_RANGE, 0x10000)
+            magic_scan_end = best_base + PRESCAN_RANGE
             magic_addr = magic_scan_start
 
             while magic_addr < magic_scan_end and magic_addr < max_address:
@@ -753,9 +757,51 @@ class RyujinxMemoryReader:
                         except Exception:
                             pass
 
-                        scan_pos += to_read
+                        # Advance with a small overlap so patterns straddling a
+                        # chunk boundary are not missed (max pattern is 4 bytes).
+                        if to_read == chunk_size:
+                            scan_pos += to_read - 3
+                        else:
+                            scan_pos += to_read
 
                 magic_addr = region_base + region_size
+
+            # ----------------------------------------------------------------
+            # Cross-reference: In the subsdk8 binary, AP_CHECK_STATS (12 bytes)
+            # is immediately followed by AP_ITEM_INFO_TABLE.  If the short
+            # 4-byte magic for AP_ITEM_INFO_TABLE wasn't found (common because
+            # the pattern is too generic and may not appear in the scanned
+            # range), derive it from any AP_CHECK_STATS hit by probing +12.
+            # The combined 8 bytes of validation (CS magic at +0, IT magic at
+            # +12) is far more reliable than either 4-byte pattern alone.
+            # ----------------------------------------------------------------
+            if not magic_hits["AP_ITEM_INFO_TABLE"] and magic_hits["AP_CHECK_STATS"]:
+                it_magic = bytes([0x49, 0x54, 0x00, 0x01])
+                for cs_addr in magic_hits["AP_CHECK_STATS"]:
+                    it_addr = cs_addr + 12
+                    try:
+                        probe = self.pm.read_bytes(it_addr, 4)
+                        if probe == it_magic:
+                            magic_hits["AP_ITEM_INFO_TABLE"].append(it_addr)
+                            print(f"[PRESCAN] AP_ITEM_INFO_TABLE: derived from AP_CHECK_STATS at 0x{it_addr:X}")
+                            break  # one reliable hit is enough
+                    except Exception:
+                        pass
+
+            # Likewise, if AP_CHECK_STATS wasn't found but AP_ITEM_INFO_TABLE
+            # was, derive AP_CHECK_STATS by probing -12.
+            if not magic_hits["AP_CHECK_STATS"] and magic_hits["AP_ITEM_INFO_TABLE"]:
+                cs_magic = bytes([0x43, 0x53, 0x00, 0x01])
+                for it_addr in magic_hits["AP_ITEM_INFO_TABLE"]:
+                    cs_addr = it_addr - 12
+                    try:
+                        probe = self.pm.read_bytes(cs_addr, 4)
+                        if probe == cs_magic:
+                            magic_hits["AP_CHECK_STATS"].append(cs_addr)
+                            print(f"[PRESCAN] AP_CHECK_STATS: derived from AP_ITEM_INFO_TABLE at 0x{cs_addr:X}")
+                            break
+                    except Exception:
+                        pass
 
             self.prescan_results = magic_hits
             total_elapsed = time.time() - start_time
@@ -2045,6 +2091,105 @@ class SSHDContext(CommonContext):
     # AP Memory Buffers: Item Info Table + Check Stats
     # ================================================================
 
+    # Maximum distance from the game base address that a subsdk8 static can
+    # reasonably be.  Anything further is almost certainly a false positive.
+    _MAX_BUFFER_DISTANCE = 0x200000000  # 8 GB
+
+    def _validate_buffer_address(self, addr: int, magic_bytes: bytes, name: str) -> bool:
+        """
+        Validate that *addr* is a plausible location for the named Rust
+        static buffer.  Checks proximity to the game base address, readback
+        of the magic bytes, and (for AP_ITEM_INFO_TABLE) structural checks
+        plus the adjacent AP_CHECK_STATS signature.
+        """
+        base = self.memory.base_address
+
+        # 1. Proximity: subsdk8 statics are in the same virtual memory region
+        #    as the main game binary.  Reject addresses that are absurdly far.
+        if abs(addr - base) > self._MAX_BUFFER_DISTANCE:
+            return False
+
+        # 2. Readback: confirm the magic is still present at that address.
+        try:
+            readback = self.memory.pm.read_bytes(addr, len(magic_bytes))
+            if readback != magic_bytes:
+                return False
+        except Exception:
+            return False
+
+        # 3. Structural validation specific to each buffer.
+        if name == "AP_ITEM_INFO_TABLE":
+            return self._validate_ap_item_table(addr)
+        if name == "AP_CHECK_STATS":
+            return self._validate_ap_check_stats(addr)
+
+        return True
+
+    def _validate_ap_item_table(self, addr: int) -> bool:
+        """Extra validation for an AP_ITEM_INFO_TABLE candidate."""
+        try:
+            # Read header (8 bytes) + first entry flag_id (2 bytes)
+            header = self.memory.pm.read_bytes(addr, 10)
+
+            # count (u16 at offset 4) must be <= 512
+            count = int.from_bytes(header[4:6], 'little')
+            if count > 512:
+                return False
+
+            # _pad (u16 at offset 6) must be 0
+            pad = int.from_bytes(header[6:8], 'little')
+            if pad != 0:
+                return False
+
+            # First entry flag_id: if count==0, should be 0xFFFF (uninit);
+            # if count>0, should be a valid id (< 1024) or 0xFFFF.
+            flag0 = int.from_bytes(header[8:10], 'little')
+            if count == 0 and flag0 != 0xFFFF:
+                return False
+            if count > 0 and flag0 > 1023 and flag0 != 0xFFFF:
+                return False
+
+            # Strongest check: AP_CHECK_STATS magic should be exactly 12 bytes
+            # before this address (they are adjacent in the subsdk8 binary).
+            cs_magic = bytes([0x43, 0x53, 0x00, 0x01])
+            try:
+                probe = self.memory.pm.read_bytes(addr - 12, 4)
+                if probe == cs_magic:
+                    return True  # Very high confidence
+            except Exception:
+                pass
+
+            # Even without the adjacent check, the structural checks passed.
+            # Accept it with medium confidence.
+            return True
+        except Exception:
+            return False
+
+    def _validate_ap_check_stats(self, addr: int) -> bool:
+        """Extra validation for an AP_CHECK_STATS candidate."""
+        try:
+            # Read the full struct (12 bytes): magic (4) + 4 u16s (8).
+            data = self.memory.pm.read_bytes(addr, 12)
+
+            # Each stat u16 should be reasonable (< 2000 locations).
+            for i in range(4, 12, 2):
+                val = int.from_bytes(data[i:i+2], 'little')
+                if val > 2000:
+                    return False
+
+            # Bonus: AP_ITEM_INFO_TABLE magic should be at +12.
+            it_magic = bytes([0x49, 0x54, 0x00, 0x01])
+            try:
+                probe = self.memory.pm.read_bytes(addr + 12, 4)
+                if probe == it_magic:
+                    return True  # Very high confidence
+            except Exception:
+                pass
+
+            return True
+        except Exception:
+            return False
+
     def _scan_for_buffer(self, magic_bytes: bytes, name: str) -> Optional[int]:
         """
         Find a Rust static buffer with the given magic signature.
@@ -2053,24 +2198,34 @@ class SSHDContext(CommonContext):
         (prescan_results) so this is typically instantaneous.  Falls back to
         a full pattern_scan_all only if the prescan didn't find anything.
         
+        All candidates are validated for proximity to the game base address
+        and structural correctness to filter out false positives.
+        
         Returns:
             Offset from base address if found, None otherwise.
         """
         if not self.memory.connected or not self.memory.pm or not self.memory.base_address:
             return None
         
+        base = self.memory.base_address
+        
         # --- Fast path: use addresses cached during the base-address scan ---
         cached = self.memory.prescan_results.get(name, [])
         if cached:
-            for addr in cached:
-                offset = addr - self.memory.base_address
-                try:
-                    readback = self.memory.read_bytes(offset, len(magic_bytes))
-                    if readback == magic_bytes:
-                        logger.info(f"Found {name} at 0x{addr:X} (offset 0x{offset:X}) [prescan cache]")
-                        return offset
-                except Exception:
-                    continue
+            # Sort by proximity — the closest valid hit is most likely correct.
+            for addr in sorted(cached, key=lambda a: abs(a - base)):
+                if self._validate_buffer_address(addr, magic_bytes, name):
+                    offset = addr - base
+                    logger.info(f"Found {name} at 0x{addr:X} (offset 0x{offset:X}) [prescan cache]")
+                    return offset
+        
+        # --- Derive from adjacent buffer (AP_CHECK_STATS ↔ AP_ITEM_INFO_TABLE) ---
+        derived_addr = self._derive_from_adjacent(name)
+        if derived_addr is not None:
+            if self._validate_buffer_address(derived_addr, magic_bytes, name):
+                offset = derived_addr - base
+                logger.info(f"Found {name} at 0x{derived_addr:X} (offset 0x{offset:X}) [derived from adjacent buffer]")
+                return offset
         
         # --- Slow path: fall back to full process scan ---
         logger.info(f"Prescan cache miss for {name}, doing full pattern scan...")
@@ -2079,19 +2234,54 @@ class SSHDContext(CommonContext):
             found = pattern.pattern_scan_all(self.memory.pm.process_handle, magic_bytes)
             if found:
                 addresses = found if isinstance(found, list) else [found]
+                # Sort by proximity to base — real statics are in the same
+                # virtual memory region, whereas false positives tend to be
+                # far away (e.g. in other heap allocations).
+                addresses.sort(key=lambda a: abs(a - base))
                 for addr in addresses:
-                    offset = addr - self.memory.base_address
-                    # Verify by reading back the magic bytes
-                    readback = self.memory.read_bytes(offset, len(magic_bytes))
-                    if readback == magic_bytes:
+                    if self._validate_buffer_address(addr, magic_bytes, name):
+                        offset = addr - base
                         logger.info(f"Found {name} at 0x{addr:X} (offset 0x{offset:X}) [full scan]")
                         return offset
+                # Log rejection for debugging
+                logger.warning(
+                    f"pattern_scan_all found {len(addresses)} hit(s) for {name} "
+                    f"but none passed validation (closest: 0x{addresses[0]:X}, "
+                    f"distance: 0x{abs(addresses[0] - base):X})"
+                )
         except ImportError:
             logger.warning(f"pymem pattern scanning not available for {name}")
         except Exception as e:
             logger.warning(f"Pattern scan for {name} failed: {e}")
         
         logger.warning(f"Could not find {name} buffer in memory")
+        return None
+
+    def _derive_from_adjacent(self, name: str) -> Optional[int]:
+        """
+        Attempt to derive a buffer address from a known adjacent buffer.
+        AP_CHECK_STATS and AP_ITEM_INFO_TABLE are exactly 12 bytes apart
+        in the subsdk8 binary (AP_CHECK_STATS first, then AP_ITEM_INFO_TABLE).
+        """
+        if name == "AP_ITEM_INFO_TABLE":
+            # Try to derive from AP_CHECK_STATS (which is 12 bytes before).
+            if self._ap_check_stats_offset is not None:
+                cs_addr = self.memory.base_address + self._ap_check_stats_offset
+                return cs_addr + 12
+            # Also try prescan hits for AP_CHECK_STATS
+            for cs_addr in self.memory.prescan_results.get("AP_CHECK_STATS", []):
+                it_addr = cs_addr + 12
+                try:
+                    probe = self.memory.pm.read_bytes(it_addr, 4)
+                    if probe == bytes([0x49, 0x54, 0x00, 0x01]):
+                        return it_addr
+                except Exception:
+                    continue
+        elif name == "AP_CHECK_STATS":
+            # Try to derive from AP_ITEM_INFO_TABLE (which is 12 bytes after).
+            if self._ap_item_info_offset is not None:
+                it_addr = self.memory.base_address + self._ap_item_info_offset
+                return it_addr - 12
         return None
 
     def _write_ap_item_info_table(self):

@@ -423,21 +423,43 @@ def generate_sshd_rando_mod(settings_dict: Dict[str, Any], output_dir: Path, see
     try:
         import lz4.block
     except ImportError as e:
+        # Gather diagnostic info for debugging
+        import importlib.machinery
+        diag_lines = [
+            f"Python version: {sys.version}",
+            f"Extension suffixes: {importlib.machinery.EXTENSION_SUFFIXES}",
+            f"sys.executable: {sys.executable}",
+        ]
+        # Check if bundled deps directory exists on sys.path
+        for p in sys.path:
+            if "_bundled_deps" in p:
+                diag_lines.append(f"Bundled deps path: {p} (exists={os.path.isdir(p)})")
+                lz4_dir = os.path.join(p, "lz4")
+                if os.path.isdir(lz4_dir):
+                    diag_lines.append(f"  lz4/ contents: {os.listdir(lz4_dir)}")
+                    block_dir = os.path.join(lz4_dir, "block")
+                    if os.path.isdir(block_dir):
+                        diag_lines.append(f"  lz4/block/ contents: {os.listdir(block_dir)}")
+                else:
+                    diag_lines.append(f"  lz4/ directory: NOT FOUND")
+        diag_str = "\n".join(diag_lines)
         error_msg = (
             "\n═══════════════════════════════════════════════════════════════\n"
             "ERROR: Required module 'lz4' could not be loaded!\n"
             "═══════════════════════════════════════════════════════════════\n\n"
             "The lz4 package should be bundled inside the .apworld file.\n"
-            "If you see this error the .apworld was not built correctly.\n\n"
+            "If you see this error the .apworld was not built correctly,\n"
+            "or the bundled extensions don't match your Python version.\n\n"
+            f"Diagnostics:\n{diag_str}\n\n"
             "Rebuild with:  python build_apworld.py\n"
             "(make sure 'pip install lz4' has been run in the build environment first)\n"
             "═══════════════════════════════════════════════════════════════\n"
         )
         print(error_msg)
         raise Exception(
-            "Missing required dependency: lz4. "
-            "The .apworld may not have been built with bundled dependencies. "
-            "Rebuild with build_apworld.py after running 'pip install lz4'."
+            f"Missing required dependency: lz4 ({type(e).__name__}: {e}). "
+            f"Python {sys.version_info.major}.{sys.version_info.minor}. "
+            "The .apworld may not have the right binary for this Python version."
         ) from e
     
     # Initialize sshd-rando imports (lazy load)

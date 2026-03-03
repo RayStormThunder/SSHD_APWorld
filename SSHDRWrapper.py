@@ -61,9 +61,10 @@ POTENTIAL_SSHD_RANDO_PATHS = [
     Path.home() / "sshd-rando",
 ]
 
-SSHD_RANDO_PATH = _find_sshd_rando_path()
-if SSHD_RANDO_PATH:
-    print(f"[SSHDRWrapper] Found sshd-rando-backend at: {SSHD_RANDO_PATH}")
+# NOTE: Do NOT resolve at import time — __init__.py hasn't extracted
+# sshd-rando-backend from the .apworld zip yet when this module is first
+# imported.  Resolution is deferred to _initialize_sshd_rando().
+SSHD_RANDO_PATH = None
 
 CURRENT_DIR = Path(__file__).parent
 
@@ -72,33 +73,31 @@ _sshd_rando_initialized = False
 
 def _initialize_sshd_rando():
     """Lazy initialization of sshd-rando imports. Only called when actually generating."""
-    global _sshd_rando_initialized
+    global _sshd_rando_initialized, SSHD_RANDO_PATH
     
     if _sshd_rando_initialized:
         return
     
-    # Check if sshd-rando was found (only when we actually need it)
+    # Resolve path NOW (after __init__.py has extracted into temp and set sys.path)
+    if SSHD_RANDO_PATH is None:
+        SSHD_RANDO_PATH = _find_sshd_rando_path()
+        if SSHD_RANDO_PATH:
+            print(f"[SSHDRWrapper] Found sshd-rando-backend at: {SSHD_RANDO_PATH}")
+    
+    # Check if sshd-rando was found
     if SSHD_RANDO_PATH is None or not SSHD_RANDO_PATH.exists():
         # Provide detailed debugging information
         current_file = Path(__file__).resolve()
-        debug_info = []
-        debug_info.append(f"Current file: {current_file}")
-        debug_info.append(f"Parent directory: {current_file.parent}")
-        
-        # List contents of parent directory
-        if current_file.parent.exists():
-            debug_info.append(f"Contents of {current_file.parent}:")
-            try:
-                for item in sorted(current_file.parent.iterdir()):
-                    item_type = "DIR " if item.is_dir() else "FILE"
-                    debug_info.append(f"  {item_type}: {item.name}")
-            except Exception as e:
-                debug_info.append(f"  Error listing directory: {e}")
+        debug_info = [
+            f"Current file: {current_file}",
+            f"Parent directory: {current_file.parent}",
+            f"sys.path entries with 'sshd': {[p for p in sys.path if 'sshd' in p.lower()]}",
+        ]
         
         raise ImportError(
             f"sshd-rando not found. Searched in:\n" +
             "\n".join(f"  - {path} (exists: {path.exists()})" for path in POTENTIAL_SSHD_RANDO_PATHS) +
-            "\n\nDebug information:\n" +
+            "\n\nAlso checked sys.path for sshd-rando-backend directory.\n" +
             "\n".join(debug_info) +
             "\n\nPlease ensure sshd-rando-backend is installed in one of the searched locations."
         )
